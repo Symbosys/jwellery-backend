@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
 import ENV from "../../../config/env.js";
-import { LoginValidator, OtpValidator } from "../validator/auth.validator.js";
+import { LoginValidator, OtpValidator, AdminRegisterValidator, AdminLoginValidator } from "../validator/auth.validator.js";
 import { asyncHandler } from "../../../middleware/error.middleware.js";
 import { ErrorResponse, SuccessResponse } from "../../../utils/response.utils.js";
 import { statusCode } from "../../../types/types.js";
@@ -167,10 +167,17 @@ export const verifyOtp = asyncHandler(async (req, res, next) => {
   });
 
   // ✅ Transaction successful — outside of the transaction scope now
-  const { user, isNewUser } = result;
+  const { user, isNewUser } = result as { user: any; isNewUser: boolean };
 
-  // Generate JWT token
-  const token = JWT.generateToken({ phoneNumber: user.phoneNumber, id: user.id.toString() });
+  // Generate JWT token with custom payload (id, name, email, role, phoneNumber)
+  const name = `${user.firstName || ""} ${user.lastName || ""}`.trim() || null;
+  const token = JWT.generateToken({
+    id: user.id.toString(),
+    name,
+    email: user.email || null,
+    role: user.role || "CUSTOMER",
+    phoneNumber: user.phoneNumber,
+  });
 
   // Return response
   return res
@@ -210,4 +217,105 @@ export const logout = asyncHandler(async (req, res, next) => {
     success: true,
     message: "Logout successful",
   });
+});
+
+// Controller: Admin Registration
+export const adminRegister = asyncHandler(async (req, res, next) => {
+  const validData = AdminRegisterValidator.parse(req.body);
+
+  const existingUser = await prisma.user.findFirst({
+    where: {
+      email: validData.email,
+    },
+  });
+
+  if (existingUser) {
+    throw new ErrorResponse("User with this email already exists", statusCode.Conflict);
+  }
+
+  const hashedPassword = await bcrypt.hash(validData.password, 10);
+
+  const admin = await prisma.user.create({
+    data: {
+      email: validData.email,
+      password: hashedPassword,
+      firstName: validData.firstName,
+      lastName: validData.lastName,
+      role: "ADMIN",
+    } as any,
+  }) as any;
+
+  const token = JWT.generateToken({ email: admin.email || "", id: admin.id.toString(), role: admin.role });
+
+  return res
+    .status(statusCode.Created)
+    .cookie("user_token", token, {
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+    })
+    .header("Authorization", `Bearer ${token}`)
+    .json({
+      success: true,
+      message: "Admin registered successfully",
+      token,
+      user: {
+        id: admin.id,
+        email: admin.email,
+        firstName: admin.firstName,
+        lastName: admin.lastName,
+        role: admin.role,
+      },
+    });
+});
+
+// Controller: Admin Login
+export const adminLogin = asyncHandler(async (req, res, next) => {
+  const validData = AdminLoginValidator.parse(req.body);
+
+  const user = await prisma.user.findUnique({
+    where: {
+      email: validData.email,
+    },
+  }) as any;
+
+  if (!user) {
+    throw new ErrorResponse("Invalid email or password", statusCode.Unauthorized);
+  }
+
+  if (user.role !== "ADMIN") {
+    throw new ErrorResponse("Access denied. Admin only.", statusCode.Forbidden);
+  }
+
+  if (!user.password) {
+    throw new ErrorResponse("Invalid credentials", statusCode.Unauthorized);
+  }
+
+  const isMatch = await bcrypt.compare(validData.password, user.password);
+  if (!isMatch) {
+    throw new ErrorResponse("Invalid email or password", statusCode.Unauthorized);
+  }
+
+  const token = JWT.generateToken({ email: user.email || "", id: user.id.toString(), role: user.role });
+
+  return res
+    .status(statusCode.OK)
+    .cookie("user_token", token, {
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+    })
+    .header("Authorization", `Bearer ${token}`)
+    .json({
+      success: true,
+      message: "Admin login successful",
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+      },
+    });
 });

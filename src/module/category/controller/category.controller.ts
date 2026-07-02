@@ -1,6 +1,6 @@
 import prisma from "../../../config/prisma";
 import { asyncHandler } from "../../../middleware/error.middleware";
-import { categoryValidator } from "../../user/validator/category.validation";
+import { categoryValidator } from "../../../user/validator/category.validation";
 import { SuccessResponse, ErrorResponse } from "../../../utils/response.utils";
 import { uploadToCloudinary } from "../../../config/cloudinary";
 

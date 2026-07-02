@@ -3,17 +3,50 @@ import { ErrorResponse, SuccessResponse } from "../../../utils/response.utils.js
 import { statusCode } from "../../../types/types.js";
 import prisma from "../../../config/prisma.js";
 import { createProductSchema, updateProductSchema } from "../validation/product.validation.js";
+import { uploadToCloudinary } from "../../../config/cloudinary.js";
+import { addToCartSchema } from "../../cart/validation/cart.validation.js";
+import type { AuthenticatedRequest } from "../../../middleware/auth.middleware.js";
+
+async function processBase64Image(base64String: string, folder: string): Promise<string> {
+    if (!base64String || !base64String.startsWith('data:image')) {
+        return base64String; 
+    }
+    const matches = base64String.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3 || !matches[2]) {
+        return base64String;
+    }
+    const imageBuffer = Buffer.from(matches[2] as string, 'base64');
+    const result = await uploadToCloudinary(imageBuffer, folder);
+    return result.secure_url;
+}
 
 export const createProduct = asyncHandler(async (req, res, next) => {
     const validData = createProductSchema.parse(req.body);
-    const { variants, ...productData } = validData;
+    let { variants, image, images, ...productData } = validData;
+
+    image = await processBase64Image(image, "products");
+    
+    let processedImages: string[] = [];
+    if (images && images.length > 0) {
+        processedImages = await Promise.all(images.map(img => processBase64Image(img, "products")));
+    }
+    
+    if (variants) {
+        for (const v of variants) {
+            if (v.image) {
+                v.image = await processBase64Image(v.image, "products/variants");
+            }
+        }
+    }
 
     const product = await prisma.product.create({
         data: {
             ...productData,
+            image,
+            images: processedImages.length > 0 ? processedImages : undefined,
             variants: variants ? {
                 create: variants.map(variant => ({
-                    sku: variant.sku,
+                    sku: variant.sku || undefined,
                     price: variant.price,
                     discountPrice: variant.discountPrice,
                     quantity: variant.quantity,
@@ -228,7 +261,28 @@ export const getProductById = asyncHandler(async (req, res, next) => {
 export const updateProduct = asyncHandler(async (req, res, next) => {
     const { id } = req.params;
     const validData = updateProductSchema.parse(req.body);
-    const { variants, ...productData } = validData;
+    let { variants, image, images, ...productData } = validData;
+
+    if (image) {
+        image = await processBase64Image(image, "products");
+    }
+    
+    let processedImages: string[] | undefined = undefined;
+    if (images !== undefined) {
+        if (images.length > 0) {
+            processedImages = await Promise.all(images.map(img => processBase64Image(img, "products")));
+        } else {
+            processedImages = [];
+        }
+    }
+    
+    if (variants) {
+        for (const v of variants) {
+            if (v.image) {
+                v.image = await processBase64Image(v.image, "products/variants");
+            }
+        }
+    }
 
     const existingProduct = await prisma.product.findUnique({ where: { id } });
     if (!existingProduct) {
@@ -247,9 +301,11 @@ export const updateProduct = asyncHandler(async (req, res, next) => {
             where: { id },
             data: {
                 ...productData,
+                ...(image ? { image } : {}),
+                ...(processedImages !== undefined ? { images: processedImages } : {}),
                 variants: (variants && variants.length > 0) ? {
                     create: variants.map(variant => ({
-                        sku: variant.sku,
+                        sku: variant.sku || undefined,
                         price: variant.price,
                         discountPrice: variant.discountPrice,
                         quantity: variant.quantity,
@@ -291,4 +347,106 @@ export const deleteProduct = asyncHandler(async (req, res, next) => {
     await prisma.product.delete({ where: { id } });
 
     return SuccessResponse(res, "Product deleted successfully", null, statusCode.OK);
+});
+
+export const addToBag = asyncHandler<AuthenticatedRequest>(async (req, res, next) => {
+    const userId = req.user?.id;
+    if (!userId) {
+        throw new ErrorResponse("Not authorized", statusCode.Unauthorized);
+    }
+
+    // Use existing cart validation schema
+    const validData = addToCartSchema.parse(req.body);
+    const { productId, variantId, quantity, size, color } = validData;
+
+    // 1. Verify product exists
+    const product = await prisma.product.findUnique({
+        where: { id: productId }
+    });
+
+    if (!product) {
+        throw new ErrorResponse("Product not found", statusCode.Not_Found);
+    }
+
+    // 2. Verify variant if provided
+    let variant = null;
+    if (variantId) {
+        variant = await prisma.productVariant.findFirst({
+            where: { id: variantId, productId }
+        });
+        if (!variant) {
+            throw new ErrorResponse("Product variant not found", statusCode.Not_Found);
+        }
+    }
+
+    // 3. Find or create user's cart
+    let cart = await prisma.cart.findUnique({
+        where: { userId }
+    });
+
+    if (!cart) {
+        cart = await prisma.cart.create({
+            data: { userId }
+        });
+    }
+
+    // 4. Check if the exact item already exists in the cart (same product, variant, size, color)
+    const existingItem = await prisma.cartItem.findFirst({
+        where: {
+            cartId: cart.id,
+            productId,
+            variantId: variantId || null,
+            size: size || null,
+            color: color || null
+        }
+    });
+
+    const newQuantity = existingItem ? existingItem.quantity + quantity : quantity;
+
+    // 5. Check stock availability
+    if (variant) {
+        if (variant.quantity < newQuantity) {
+            throw new ErrorResponse(
+                `Only ${variant.quantity} items of this variant are in stock (requested total: ${newQuantity})`,
+                statusCode.Bad_Request
+            );
+        }
+    } else {
+        if (product.quantity < newQuantity) {
+            throw new ErrorResponse(
+                `Only ${product.quantity} items of this product are in stock (requested total: ${newQuantity})`,
+                statusCode.Bad_Request
+            );
+        }
+    }
+
+    // 6. Update existing item quantity or create new cart item
+    let cartItem;
+    if (existingItem) {
+        cartItem = await prisma.cartItem.update({
+            where: { id: existingItem.id },
+            data: { quantity: newQuantity },
+            include: {
+                product: true,
+                variant: true
+            }
+        });
+    } else {
+        cartItem = await prisma.cartItem.create({
+            data: {
+                cartId: cart.id,
+                productId,
+                variantId: variantId || null,
+                quantity,
+                size: size || null,
+                color: color || null
+            },
+            include: {
+                product: true,
+                variant: true
+            }
+        });
+    }
+
+    return SuccessResponse(res, "Item added to bag successfully", cartItem, statusCode.Created);
 });

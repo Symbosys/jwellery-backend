@@ -1,5 +1,5 @@
 import { parse } from "zod";
-import type { Prisma } from "../../../../generated/prisma/browser";
+import type { Prisma } from "../../../../generated/prisma";
 import prisma from "../../../config/prisma";
 import { asyncHandler } from "../../../middleware/error.middleware";
 import { ErrorResponse, SuccessResponse } from "../../../utils/response.utils";

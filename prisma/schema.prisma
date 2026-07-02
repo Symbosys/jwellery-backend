@@ -13,24 +13,31 @@ datasource db {
   provider = "mysql"
 }
 
-
 model User {
-  id            String   @id @default(uuid())
-  firstName     String?
-  lastName      String?
-  email         String?  @unique
-  phoneNumber   String   @unique
-  dateOfBirth   DateTime?
-  gender        Gender?
+  id          String    @id @default(uuid())
+  firstName   String?
+  lastName    String?
+  email       String?   @unique
+  phoneNumber String?   @unique
+  password    String?
+  role        Role      @default(CUSTOMER)
+  dateOfBirth DateTime?
+  gender      Gender?
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  cart          Cart?
-  wishlist      Wishlist[]
+  cart         Cart?
+  wishlist     Wishlist[]
+  orders       Order[]
+  chatSessions ChatSession[]
+  reviews      Review[]
 }
 
-
+enum Role {
+  CUSTOMER
+  ADMIN
+}
 
 enum Gender {
   FEMALE
@@ -40,7 +47,7 @@ enum Gender {
 
 model Otp {
   id              BigInt    @id @default(autoincrement())
-  phoneNumber          String    @unique
+  phoneNumber     String    @unique
   otp             String
   expiresAt       DateTime
   attempts        Int       @default(0)
@@ -54,108 +61,111 @@ model Otp {
   @@map("otps")
 }
 
-
 model Category {
-  id          String    @id @default(uuid())
+  id          String   @id @default(uuid())
   name        String
   description String?
-  image       String?
-  slug        String    @unique
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  image       String?  @db.LongText
+  slug        String   @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  subCategories SubCategory[]  // One-to-many relation to SubCategorie
+  subCategories SubCategory[] // One-to-many relation to SubCategorie
   products      Product[]
-} 
+}
 
 model SubCategory {
-  id          String    @id @default(uuid())
+  id          String  @id @default(uuid())
   name        String
-  description  String
-  image    String?
-  categoryId String            // Foreign key to Categorie
- 
+  description String
+  image       String? @db.LongText
+  categoryId  String // Foreign key to Categorie
 
-category   Category @relation(fields: [categoryId], references: [id])
+  category Category @relation(fields: [categoryId], references: [id])
 
-    createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  
-  @@index([categoryId])        // Recommended index for performance
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   products Product[]
 
-  
+  @@index([categoryId]) // Recommended index for performance
 }
- 
 
 model Product {
-  id            String   @id @default(uuid())
-  name          String
-  description   String?  @db.Text
-  image         String
-  images        Json?    // Storage for multiple image URLs
-  
-  brand         String?
-  price         Decimal  @db.Decimal(10, 2)
-  discountPrice Decimal? @db.Decimal(10, 2)
-  quantity      Int      @default(0)
-  
-  sizes         Json?    // e.g. ["S", "M", "L"]
-  colors        Json?    // e.g. ["Red", "Blue"]
+  id          String  @id @default(uuid())
+  name        String
+  description String? @db.Text
+  image       String  @db.LongText
+  images      Json? // Storage for multiple image URLs
 
-  rating        Float    @default(0)
-  numReviews    Int      @default(0)
+  brand             String?
+  price             Decimal  @db.Decimal(15, 2)
+  discountPrice     Decimal? @db.Decimal(15, 2)
+  quantity          Int      @default(0)
+  sku               String?
+  cost              Decimal? @db.Decimal(15, 2)
+  lowStockThreshold Int      @default(10)
+  weight            Decimal? @db.Decimal(15, 2)
+  weightUnit        String   @default("kg")
+  status            String   @default("active")
+  taxable           Boolean  @default(true)
+  shippingRequired  Boolean  @default(true)
+  seoTitle          String?
+  seoDescription    String?  @db.Text
+  seoKeywords       String?
 
-  categoryId    String
-  category      Category @relation(fields: [categoryId], references: [id])
+  sizes  Json? // e.g. ["S", "M", "L"]
+  colors Json? // e.g. ["Red", "Blue"]
+
+  rating     Float @default(0)
+  numReviews Int   @default(0)
+
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
   subCategoryId String?
-  subCategory   SubCategory? @relation(fields: [subCategoryId], references: [id])
+  subCategory   SubCategory? @relation(fields: [subCategoryId], references: [id], onDelete: Cascade)
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  @@index([categoryId])
-  @@index([subCategoryId])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   cartItems     CartItem[]
   variants      ProductVariant[]
   wishlistItems Wishlist[]
+  orderItems    OrderItem[]
+  analytics     ProductAnalytics?
+  inventory     Inventory?
+  reviews       Review[]
+  offers        Offer[]
+
+  @@index([categoryId])
+  @@index([subCategoryId])
 }
 
-
-
- 
-
-
-
-
 model Cart {
-  id        String     @id @default(uuid())
-  userId    String     @unique
-  user      User       @relation(fields: [userId], references: [id])
-  items     CartItem[]
+  id     String     @id @default(uuid())
+  userId String     @unique
+  user   User       @relation(fields: [userId], references: [id])
+  items  CartItem[]
 
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model CartItem {
-  id        String   @id @default(uuid())
-  cartId    String
-  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
-  
+  id     String @id @default(uuid())
+  cartId String
+  cart   Cart   @relation(fields: [cartId], references: [id], onDelete: Cascade)
+
   productId String
-  product   Product  @relation(fields: [productId], references: [id])
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   variantId String?
   variant   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
 
-  quantity  Int      @default(1)
-  size      String?
-  color     String?
+  quantity Int     @default(1)
+  size     String?
+  color    String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -191,25 +201,26 @@ model ProductVariant {
   productId       String
   product         Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
   sku             String?          @unique
-  price           Decimal          @db.Decimal(10, 2)
-  discountPrice   Decimal?         @db.Decimal(10, 2)
+  price           Decimal          @db.Decimal(15, 2)
+  discountPrice   Decimal?         @db.Decimal(15, 2)
   quantity        Int              @default(0)
-  image           String?
+  image           String?          @db.LongText
   attributeValues AttributeValue[]
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 
-  cartItems       CartItem[]
+  cartItems  CartItem[]
+  orderItems OrderItem[]
 
   @@index([productId])
 }
 
 model Wishlist {
-  id        String   @id @default(uuid())
+  id        String  @id @default(uuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   productId String
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -228,4 +239,302 @@ model SearchQuery {
   updatedAt DateTime @updatedAt
 
   @@index([query])
+}
+
+model Order {
+  id          String @id @default(uuid())
+  orderNumber String @unique
+  userId      String
+  user        User   @relation(fields: [userId], references: [id])
+
+  items OrderItem[]
+
+  status        OrderStatus   @default(PENDING)
+  paymentStatus PaymentStatus @default(UNPAID)
+  paymentMethod String?
+
+  subtotal       Decimal @db.Decimal(15, 2)
+  discount       Decimal @default(0) @db.Decimal(15, 2)
+  shippingCharge Decimal @default(0) @db.Decimal(15, 2)
+  tax            Decimal @default(0) @db.Decimal(15, 2)
+  totalAmount    Decimal @db.Decimal(15, 2)
+
+  // Shipping address snapshot
+  shippingName    String
+  shippingPhone   String
+  shippingAddress String
+  shippingCity    String
+  shippingState   String
+  shippingPincode String
+  longitude       String?
+  latitude        String?
+
+  note String? @db.Text
+
+  placedAt    DateTime  @default(now())
+  shippedAt   DateTime?
+  deliveredAt DateTime?
+  cancelledAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([orderNumber])
+  @@index([status])
+  @@index([paymentStatus])
+}
+
+model OrderItem {
+  id      String @id @default(uuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  variantId String?
+  variant   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  // Snapshot at time of purchase
+  productName  String
+  productImage String  @db.LongText
+  size         String?
+  color        String?
+
+  quantity   Int
+  unitPrice  Decimal @db.Decimal(15, 2)
+  totalPrice Decimal @db.Decimal(15, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orderId])
+  @@index([productId])
+  @@index([variantId])
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  RETURNED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAID
+  REFUNDED
+  FAILED
+}
+
+model StoreAnalytics {
+  id             String   @id @default(uuid())
+  date           DateTime @unique // The day this entry represents
+  totalSales     Decimal  @default(0.00) @db.Decimal(15, 2)
+  totalOrders    Int      @default(0)
+  totalReturns   Int      @default(0)
+  totalCancelled Int      @default(0)
+  visitsCount    Int      @default(0)
+
+  onTimeDeliveries Int @default(0)
+  lateDeliveries   Int @default(0)
+
+  averageResponseTime Float @default(0.0) // In hours
+  averageRating       Float @default(0.0)
+  totalReviews        Int   @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([date])
+  @@map("store_analytics")
+}
+
+model ProductAnalytics {
+  id        String  @id @default(uuid())
+  productId String  @unique
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  viewsCount     Int     @default(0)
+  addToCartCount Int     @default(0)
+  purchaseCount  Int     @default(0)
+  revenue        Decimal @default(0.00) @db.Decimal(15, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId])
+  @@map("product_analytics")
+}
+
+model Inventory {
+  id        String  @id @default(uuid())
+  productId String  @unique
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  quantity      Int     @default(0)
+  lowStockAlert Int     @default(10)
+  warehouseLoc  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId])
+  @@map("inventories")
+}
+
+// Marketing Models
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
+}
+
+model Coupon {
+  id             String       @id @default(uuid())
+  code           String       @unique
+  description    String?      @db.Text
+  discountType   DiscountType
+  discountValue  Decimal      @db.Decimal(15, 2)
+  minOrderAmount Decimal?     @db.Decimal(15, 2)
+  maxDiscount    Decimal?     @db.Decimal(15, 2)
+  startDate      DateTime?
+  endDate        DateTime?
+  usageLimit     Int?
+  usedCount      Int          @default(0)
+  isActive       Boolean      @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([code])
+  @@index([isActive])
+  @@map("coupons")
+}
+
+model Banner {
+  id          String    @id @default(uuid())
+  title       String
+  description String?   @db.Text
+  imageUrl    String    @db.LongText
+  linkUrl     String?
+  position    String?
+  isActive    Boolean   @default(true)
+  startDate   DateTime?
+  endDate     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
+  @@index([position])
+  @@map("banners")
+}
+
+// Support Models
+
+model ChatSession {
+  id     String            @id @default(uuid())
+  userId String?
+  user   User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status ChatSessionStatus @default(ACTIVE)
+
+  messages ChatMessage[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@map("chat_sessions")
+}
+
+enum ChatSessionStatus {
+  ACTIVE
+  CLOSED
+}
+
+model ChatMessage {
+  id        String      @id @default(uuid())
+  sessionId String
+  session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  sender MessageSender
+  text   String        @db.LongText
+
+  createdAt DateTime @default(now())
+
+  @@index([sessionId])
+  @@map("chat_messages")
+}
+
+enum MessageSender {
+  USER
+  AGENT
+  SYSTEM
+}
+
+model Review {
+  id      String       @id @default(uuid())
+  rating  Int
+  comment String       @db.Text
+  reply   String?      @db.Text
+  status  ReviewStatus @default(UNREPLIED)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId])
+  @@index([userId])
+}
+
+enum ReviewStatus {
+  REPLIED
+  UNREPLIED
+}
+
+enum OfferType {
+  FLAT_DISCOUNT
+  PERCENTAGE_DISCOUNT
+  MAKING_CHARGE_DISCOUNT
+  FREE_GIFT
+  CASHBACK
+  EXCHANGE
+  FESTIVAL
+  BUY_ONE_GET_ONE_FREE
+  GOLD_SAVINGS
+  LOYALTY_REWARD
+}
+
+model Offer {
+  id          String    @id @default(uuid())
+  name        String // e.g., "Diwali Special", "20% Off Diamond"
+  description String?   @db.Text
+  offerType   OfferType
+
+  // Value fields based on OfferType
+  discountValue   Decimal? @db.Decimal(15, 2) // Flat amount, percentage, or making charge %
+  minPurchase     Decimal? @db.Decimal(15, 2) // e.g., on purchases above 1,00,000
+  giftDescription String? // e.g., "Free silver coin"
+  cashbackDetails String? // e.g., "HDFC Credit Card 5% Cashback"
+  exchangeDetails String? // e.g., "100% exchange value on old gold"
+
+  startDate DateTime?
+  endDate   DateTime?
+  isActive  Boolean   @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products Product[] // Many-to-many with Product
 }
