@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { OrderStatus, PaymentStatus } from "../../../../generated/prisma/index.js";
+import { OrderStatus, PaymentStatus, PaymentMethod } from "../../../../generated/prisma/index.js";
 
 export const createOrderSchema = z.object({
   shippingName: z.string({ message: "Shipping name is required" }).min(2, "Name must be at least 2 characters").trim(),
@@ -8,7 +8,7 @@ export const createOrderSchema = z.object({
   shippingCity: z.string({ message: "Shipping city is required" }).min(2, "City must be at least 2 characters").trim(),
   shippingState: z.string({ message: "Shipping state is required" }).min(2, "State must be at least 2 characters").trim(),
   shippingPincode: z.string({ message: "Shipping pincode is required" }).min(5, "Pincode must be at least 5 characters").trim(),
-  paymentMethod: z.string().optional().default("COD"),
+  paymentMethod: z.nativeEnum(PaymentMethod).optional().default("COD"),
   note: z.string().max(500, "Note cannot exceed 500 characters").optional(),
 });
 

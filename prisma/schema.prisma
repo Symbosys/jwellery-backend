@@ -269,9 +269,9 @@ model Order {
 
   items OrderItem[]
 
-  status        OrderStatus   @default(PENDING)
-  paymentStatus PaymentStatus @default(UNPAID)
-  paymentMethod String?
+  status        OrderStatus    @default(PENDING)
+  paymentStatus PaymentStatus  @default(UNPAID)
+  paymentMethod PaymentMethod?
 
   subtotal       Decimal @db.Decimal(15, 2)
   discount       Decimal @default(0) @db.Decimal(15, 2)
@@ -349,6 +349,11 @@ enum PaymentStatus {
   PAID
   REFUNDED
   FAILED
+}
+
+enum PaymentMethod {
+  COD
+  CARD
 }
 
 model StoreAnalytics {
