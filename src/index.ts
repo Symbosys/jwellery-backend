@@ -24,7 +24,10 @@ const app = express();
 
 app.use(
   cors({
-    origin: "*",
+    origin: [
+      "https://protien-frontend.vercel.app",
+      "https://protien-admin.vercel.app/",
+    ],
     credentials: true, // Important: allows cookies to be sent/received
   }),
 );
