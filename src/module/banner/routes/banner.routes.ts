@@ -4,8 +4,8 @@ import {
   getAllBanners,
   getBannerById,
   updateBanner,
-  deleteBanner
-} from "../controller/banner.controller";
+  deleteBanner,
+} from "../controller/banner.controller.js";
 import upload from "../../../utils/multer.js";
 
 const router = express.Router();

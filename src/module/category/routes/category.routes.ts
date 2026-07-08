@@ -5,7 +5,7 @@ import {
   getById,
   UpdateCategory,
   deleteCategory,
-} from "../controller/category.controller";
+} from "../controller/category.controller.js";
 import { protect } from "../../../middleware/auth.middleware.js";
 import upload from "../../../utils/multer.js";
 
