@@ -22,14 +22,28 @@ import blogrouter from "./module/blogs/routes/blog.routes.js";
 
 const app = express();
 
+const allowedOrigins = [
+  "https://protien-frontend.vercel.app",
+  "https://protien-admin.vercel.app",
+];
+
 app.use(
   cors({
-    origin: [
-      "https://protien-frontend.vercel.app",
-      "https://protien-admin.vercel.app/",
-    ],
-    credentials: true, // Important: allows cookies to be sent/received
-  }),
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps, curl, postman)
+      if (!origin) return callback(null, true);
+      
+      if (
+        allowedOrigins.includes(origin) ||
+        /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?$/.test(origin)
+      ) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true,
+  })
 );
 
 app.use(express.json({ limit: "50mb" })); // ✅ REQUIRED
