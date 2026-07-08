@@ -88,11 +88,7 @@ export const requestOtp = asyncHandler(async (req, res, next) => {
     },
   });
 
-  if (ENV.mode === "development") {
-    console.log("OTP", otp);
-  } else {
-    // await sendOtpSMS(validData.mobile, Number(otp));
-  }
+  console.log("OTP", otp);
 
   return SuccessResponse(
     res,
