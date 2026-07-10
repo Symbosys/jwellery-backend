@@ -167,6 +167,23 @@ export const createUserOrder = asyncHandler<AuthenticatedRequest>(async (req, re
       }
     });
 
+    // Update User's firstName and lastName if they are not set yet
+    const userObj = await tx.user.findUnique({
+      where: { id: userId }
+    });
+    if (userObj && (!userObj.firstName || !userObj.firstName.trim())) {
+      const nameParts = shippingName.trim().split(/\s+/);
+      const fName = nameParts[0] || "";
+      const lName = nameParts.slice(1).join(" ") || "";
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          firstName: fName,
+          lastName: lName
+        }
+      });
+    }
+
     // 2. Update stock quantities
     for (const update of stockUpdates) {
       if (update.type === "variant") {
