@@ -24,8 +24,8 @@ import addressrouter from "./module/address/routes/address.routes.js";
 const app = express();
 
 const allowedOrigins = [
-  "https://protien-frontend.vercel.app",
-  "https://protien-admin.vercel.app",
+  "https://jwellery-frontend-seven.vercel.app/",
+  "https://jwellery-admin-delta.vercel.app/",
 ];
 
 app.use(
@@ -33,10 +33,12 @@ app.use(
     origin: (origin, callback) => {
       // Allow requests with no origin (like mobile apps, curl, postman)
       if (!origin) return callback(null, true);
-      
+
       if (
         allowedOrigins.includes(origin) ||
-        /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?$/.test(origin)
+        /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?$/.test(
+          origin,
+        )
       ) {
         callback(null, true);
       } else {
@@ -44,7 +46,7 @@ app.use(
       }
     },
     credentials: true,
-  })
+  }),
 );
 
 app.use(express.json({ limit: "50mb" })); // ✅ REQUIRED
