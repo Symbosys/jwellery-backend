@@ -2,10 +2,21 @@ import crypto from "crypto";
 import Razorpay from "razorpay";
 import ENV from "../../../config/env.js";
 
-const razorpay = new Razorpay({
-  key_id: ENV.RAZORPAY_KEY_ID,
-  key_secret: ENV.RAZORPAY_KEY_SECRET,
-});
+let razorpayInstance: Razorpay | null = null;
+
+const getRazorpayInstance = () => {
+  if (!razorpayInstance) {
+    if (!ENV.RAZORPAY_KEY_ID || !ENV.RAZORPAY_KEY_SECRET) {
+      console.warn("Razorpay credentials are missing; Razorpay payments will not be functional.");
+      return null;
+    }
+    razorpayInstance = new Razorpay({
+      key_id: ENV.RAZORPAY_KEY_ID,
+      key_secret: ENV.RAZORPAY_KEY_SECRET,
+    });
+  }
+  return razorpayInstance;
+};
 
 /**
  * Creates a Razorpay order
@@ -13,12 +24,16 @@ const razorpay = new Razorpay({
  * @param receipt - Unique receipt order number
  */
 export const createRazorpayOrder = async (amount: number, receipt: string) => {
+  const instance = getRazorpayInstance();
+  if (!instance) {
+    throw new Error("Razorpay payment gateway is not configured.");
+  }
   const options = {
     amount: Math.round(amount * 100), // convert to paise
     currency: "INR",
     receipt: receipt,
   };
-  return await razorpay.orders.create(options);
+  return await instance.orders.create(options);
 };
 
 /**
@@ -41,4 +56,4 @@ export const verifyRazorpaySignature = (
   return generatedSignature === signature;
 };
 
-export default razorpay;
+export default getRazorpayInstance;

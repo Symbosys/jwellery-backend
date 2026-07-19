@@ -1,7 +1,7 @@
 import prisma from "../../../config/prisma.js";
 import { asyncHandler } from "../../../middleware/error.middleware.js";
-import { SuccessResponse, ErrorResponse } from "../../../utils/response.utils.js";
-import { getAnalyticsQuerySchema, trackEventSchema } from "../validation/analytics.validation.js";
+import { SuccessResponse } from "../../../utils/response.utils.js";
+import { getAnalyticsQuerySchema } from "../validation/analytics.validation.js";
 
 const getDateRange = (range: string) => {
   const now = new Date();
@@ -207,7 +207,7 @@ export const getAnalyticsOverview = asyncHandler(async (req, res, next) => {
       item.percentage = totalRatingsCount > 0 ? Math.round((item.count / totalRatingsCount) * 100) : 0;
     });
 
-    return SuccessResponse(res, "Analytics overview fetched successfully", {
+    return SuccessResponse(res, "Admin Analytics overview fetched successfully", {
       metrics: overview,
       ratingBreakdown: breakdown,
       totalReviews: totalRatingsCount,
@@ -300,7 +300,7 @@ export const getPerformanceChart = asyncHandler(async (req, res, next) => {
 
     const chartData = Object.values(aggregated);
 
-    return SuccessResponse(res, "Analytics chart data fetched successfully", chartData);
+    return SuccessResponse(res, "Admin Analytics chart data fetched successfully", chartData);
   } catch (err) {
     next(err);
   }
@@ -335,42 +335,7 @@ export const getProductAnalytics = asyncHandler(async (req, res, next) => {
       return b[field] - a[field];
     });
 
-    return SuccessResponse(res, "Product analytics fetched successfully", results.slice(0, limit));
-  } catch (err) {
-    next(err);
-  }
-});
-
-export const trackEvent = asyncHandler(async (req, res, next) => {
-  try {
-    const { productId, eventType, quantity, amount } = trackEventSchema.parse(req.body);
-
-    const product = await prisma.product.findUnique({
-      where: { id: productId }
-    });
-
-    if (!product) {
-      throw new ErrorResponse("Product not found", 404);
-    }
-
-    const analytics = await prisma.productAnalytics.upsert({
-      where: { productId },
-      update: {
-        viewsCount: eventType === "VIEW" ? { increment: quantity } : undefined,
-        addToCartCount: eventType === "ADD_TO_CART" ? { increment: quantity } : undefined,
-        purchaseCount: eventType === "PURCHASE" ? { increment: quantity } : undefined,
-        revenue: eventType === "PURCHASE" && amount ? { increment: amount } : undefined,
-      },
-      create: {
-        productId,
-        viewsCount: eventType === "VIEW" ? quantity : 0,
-        addToCartCount: eventType === "ADD_TO_CART" ? quantity : 0,
-        purchaseCount: eventType === "PURCHASE" ? quantity : 0,
-        revenue: eventType === "PURCHASE" && amount ? amount : 0,
-      }
-    });
-
-    return SuccessResponse(res, "Event tracked successfully", analytics);
+    return SuccessResponse(res, "Admin Product analytics fetched successfully", results.slice(0, limit));
   } catch (err) {
     next(err);
   }

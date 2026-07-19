@@ -20,7 +20,11 @@ export const getCart = asyncHandler<AuthenticatedRequest>(async (req, res, next)
                     product: true,
                     variant: {
                         include: {
-                            attributeValues: true
+                            attributeValues: {
+                                include: {
+                                    attribute: true
+                                }
+                            }
                         }
                     }
                 },
@@ -41,7 +45,11 @@ export const getCart = asyncHandler<AuthenticatedRequest>(async (req, res, next)
                         product: true,
                         variant: {
                             include: {
-                                attributeValues: true
+                                attributeValues: {
+                                    include: {
+                                        attribute: true
+                                    }
+                                }
                             }
                         }
                     },
@@ -137,7 +145,11 @@ export const addToCart = asyncHandler<AuthenticatedRequest>(async (req, res, nex
                 product: true,
                 variant: {
                     include: {
-                        attributeValues: true
+                        attributeValues: {
+                            include: {
+                                attribute: true
+                            }
+                        }
                     }
                 }
             }
@@ -156,7 +168,11 @@ export const addToCart = asyncHandler<AuthenticatedRequest>(async (req, res, nex
                 product: true,
                 variant: {
                     include: {
-                        attributeValues: true
+                        attributeValues: {
+                            include: {
+                                attribute: true
+                            }
+                        }
                     }
                 }
             }
@@ -223,7 +239,11 @@ export const updateCartItemQuantity = asyncHandler<AuthenticatedRequest>(async (
             product: true,
             variant: {
                 include: {
-                    attributeValues: true
+                    attributeValues: {
+                        include: {
+                            attribute: true
+                        }
+                    }
                 }
             }
         }

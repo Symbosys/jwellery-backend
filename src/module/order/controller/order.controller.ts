@@ -29,7 +29,8 @@ export const createOrder = asyncHandler<AuthenticatedRequest>(async (req, res, n
     shippingState,
     shippingPincode,
     paymentMethod,
-    note
+    note,
+    addressId
   } = validData;
 
   // Fetch user's cart and items
@@ -127,6 +128,7 @@ export const createOrder = asyncHandler<AuthenticatedRequest>(async (req, res, n
       data: {
         orderNumber,
         userId,
+        addressId,
         status: "PENDING",
         paymentStatus: paymentMethod === "COD" ? "UNPAID" : "UNPAID", // Default to unpaid
         paymentMethod,
@@ -219,7 +221,8 @@ export const getOrderById = asyncHandler<AuthenticatedRequest>(async (req, res, 
   const order = await prisma.order.findUnique({
     where: { id },
     include: {
-      items: true
+      items: true,
+      address: true
     }
   });
 

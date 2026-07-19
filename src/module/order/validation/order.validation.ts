@@ -10,6 +10,7 @@ export const createOrderSchema = z.object({
   shippingPincode: z.string({ message: "Shipping pincode is required" }).min(5, "Pincode must be at least 5 characters").trim(),
   paymentMethod: z.nativeEnum(PaymentMethod).optional().default("COD"),
   note: z.string().max(500, "Note cannot exceed 500 characters").optional(),
+  addressId: z.string().optional(),
 });
 
 export const updateOrderStatusSchema = z.object({
@@ -26,9 +27,10 @@ export const updatePaymentStatusSchema = z.object({
 
 export const verifyPaymentSchema = z.object({
   orderId: z.string({ message: "Order ID is required" }).trim(),
-  razorpayOrderId: z.string({ message: "Razorpay Order ID is required" }).trim(),
-  razorpayPaymentId: z.string({ message: "Razorpay Payment ID is required" }).trim(),
-  razorpaySignature: z.string({ message: "Razorpay Signature is required" }).trim(),
+  razorpayOrderId: z.string().trim().optional(),
+  razorpayPaymentId: z.string().trim().optional(),
+  razorpaySignature: z.string().trim().optional(),
+  cashfreeOrderId: z.string().trim().optional(),
 });
 
 

@@ -625,3 +625,30 @@ enum AddressType {
   OTHER
 }
 
+
+model WebConfig {
+  id               String   @id @default(uuid())
+  // Business Profile
+  storeName        String   @default("")
+  businessEmail    String   @default("")
+  phoneNumber      String   @default("")
+  website          String?
+  storeDescription String?  @db.Text
+  logo             String?  @db.LongText
+
+  // Banking Details
+  bankName          String?
+  accountHolderName String?
+  accountNumber     String?
+  routingNumber     String?
+
+  // GST & Tax Info
+  gstNumber              String?
+  panNumber              String?
+  registeredBusinessName String?
+
+  // Pickup Addresses (Stored as structured JSON array of address objects)
+  pickupAddresses Json?
+
+  @@map("web_configs")
+}
