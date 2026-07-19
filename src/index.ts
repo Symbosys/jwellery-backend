@@ -28,8 +28,8 @@ import dashboardRouter from "./module/admin/routes/dashboard.routes.js";
 const app = express();
 
 const allowedOrigins = [
-  "https://protien-frontend.vercel.app",
-  "https://protien-admin.vercel.app",
+  "https://jwellery-frontend-seven.vercel.app",
+  "https://jwellery-admin-delta.vercel.app/login",
   "https://admin.fuelandnutrients.com",
   "https://fuelandnutrients.com"
 ];
