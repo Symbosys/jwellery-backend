@@ -26,6 +26,7 @@
     "@types/cors": "^2.8.19",
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.3",
+    "cashfree-pg": "^6.0.4",
     "cloudinary": "^2.8.0",
     "cors": "^2.8.5",
     "country-state-city": "^3.2.1",
