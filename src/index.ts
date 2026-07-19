@@ -29,7 +29,7 @@ const app = express();
 
 const allowedOrigins = [
   "https://jwellery-frontend-seven.vercel.app",
-  "https://jwellery-admin-delta.vercel.app/login",
+  "https://jwellery-admin-delta.vercel.app",
   "https://admin.fuelandnutrients.com",
   "https://fuelandnutrients.com"
 ];
