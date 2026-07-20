@@ -40,16 +40,21 @@ app.use(
       // Allow requests with no origin (like mobile apps, curl, postman)
       if (!origin) return callback(null, true);
       
-      if (
+      const isAllowed = 
         allowedOrigins.includes(origin) ||
-        /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?$/.test(origin)
-      ) {
+        /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?$/.test(origin) ||
+        /^https:\/\/([a-zA-Z0-9-]+\.)*vercel\.app$/.test(origin);
+
+      if (isAllowed) {
         callback(null, true);
       } else {
-        callback(new Error("Not allowed by CORS"));
+        // Pass false to withhold CORS headers without throwing a 500 error
+        callback(null, false);
       }
     },
     credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
   })
 );
 
