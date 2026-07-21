@@ -137,6 +137,12 @@ model Product {
   sizes  Json? // e.g. ["S", "M", "L"]
   colors Json? // e.g. ["Red", "Blue"]
 
+  countryOfOrigin String?  @default("India")
+  idealFor        String?
+  material        String?
+  packOf          Int?     @default(1)
+  productType     String?
+
   rating     Float @default(0)
   numReviews Int   @default(0)
 
