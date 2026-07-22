@@ -5,7 +5,6 @@ import { statusCode } from "../../../types/types.js";
 import { createOrderSchema, verifyPaymentSchema } from "../validation/order.validation.js";
 import type { AuthenticatedRequest } from "../../../middleware/auth.middleware.js";
 import { createRazorpayOrder, verifyRazorpaySignature } from "../services/razorpay.service.js";
-import { createCashfreeOrder, getCashfreeOrder } from "../services/cashfree.service.js";
 
 // Helper to generate unique order number
 const generateOrderNumber = (): string => {
@@ -138,7 +137,7 @@ export const createUserOrder = asyncHandler<AuthenticatedRequest>(async (req, re
         addressId,
         status: "PENDING",
         paymentStatus: "UNPAID",
-        paymentMethod: paymentMethod === "CASHFREE" ? "CASHFREE" : paymentMethod === "RAZORPAY" ? "RAZORPAY" : "COD",
+        paymentMethod: paymentMethod === "RAZORPAY" ? "RAZORPAY" : "COD",
         subtotal,
         discount,
         shippingCharge,
@@ -281,84 +280,7 @@ export const createUserOrder = asyncHandler<AuthenticatedRequest>(async (req, re
     }
   }
 
-  // Cashfree integration handling
-  if (paymentMethod === "CASHFREE") {
-    try {
-      const customerUser = await prisma.user.findUnique({
-        where: { id: userId }
-      });
 
-      const cashfreeOrder = await createCashfreeOrder({
-        orderId: orderNumber,
-        amount: totalAmount,
-        customer: {
-          id: userId,
-          name: shippingName,
-          email: customerUser?.email || "customer@example.com",
-          phone: shippingPhone
-        }
-      });
-
-      // Update database order with Cashfree order ID link
-      const updatedOrder = await prisma.order.update({
-        where: { id: order.id },
-        data: { cashfreeOrderId: cashfreeOrder.cf_order_id },
-        include: { items: true }
-      });
-
-      return SuccessResponse(
-        res,
-        "Order initiated. Please complete Cashfree payment.",
-        {
-          order: updatedOrder,
-          cashfreeOrder: {
-            paymentSessionId: cashfreeOrder.payment_session_id,
-            cfOrderId: cashfreeOrder.cf_order_id,
-            orderId: cashfreeOrder.order_id,
-            orderAmount: cashfreeOrder.order_amount,
-            orderCurrency: cashfreeOrder.order_currency,
-            sandbox: process.env.CASHFREE_ENV !== "PRODUCTION"
-          }
-        },
-        statusCode.Created
-      );
-    } catch (error) {
-      console.error("Cashfree Order initiation failed:", error);
-      const errorMessage = (error as any).message || String(error);
-
-      // Rollback database order and restore stocks
-      await prisma.$transaction(async (tx) => {
-        await tx.order.update({
-          where: { id: order.id },
-          data: {
-            status: "CANCELLED",
-            paymentStatus: "FAILED",
-            cancelledAt: new Date(),
-            note: `Auto-cancelled: Cashfree initiation failed: ${errorMessage}`
-          }
-        });
-
-        for (const update of stockUpdates) {
-          if (update.type === "variant") {
-            await tx.productVariant.update({
-              where: { id: update.id },
-              data: { quantity: update.originalQty }
-            });
-          } else {
-            await tx.product.update({
-              where: { id: update.id },
-              data: { quantity: update.originalQty }
-            });
-          }
-        }
-      });
-
-      throw new ErrorResponse(
-        `Failed to initiate payment gateway order: ${errorMessage}`,
-        statusCode.Internal_Server_Error
-      );
-    }
-  }
 
   // Cash on Delivery (COD) Success Response
   return SuccessResponse(res, "Order placed successfully (Cash on Delivery)", order, statusCode.Created);
@@ -375,7 +297,7 @@ export const verifyPayment = asyncHandler<AuthenticatedRequest>(async (req, res,
   }
 
   const validData = verifyPaymentSchema.parse(req.body);
-  const { orderId, razorpayOrderId, razorpayPaymentId, razorpaySignature, cashfreeOrderId } = validData;
+  const { orderId, razorpayOrderId, razorpayPaymentId, razorpaySignature } = validData;
 
   let order = await prisma.order.findUnique({
     where: { id: orderId },
@@ -388,39 +310,6 @@ export const verifyPayment = asyncHandler<AuthenticatedRequest>(async (req, res,
 
   if (order.userId !== userId) {
     throw new ErrorResponse("Not authorized to verify this payment", statusCode.Forbidden);
-  }
-
-  // Cashfree Verification
-  if (order.paymentMethod === "CASHFREE" || cashfreeOrderId) {
-    try {
-      const cfOrder = await getCashfreeOrder(order.orderNumber);
-      if (!cfOrder || cfOrder.order_status !== "PAID") {
-        await prisma.order.update({
-          where: { id: orderId },
-          data: {
-            paymentStatus: "FAILED"
-          }
-        });
-        throw new ErrorResponse("Cashfree payment verification failed: Order is unpaid", statusCode.Bad_Request);
-      }
-
-      const confirmedOrder = await prisma.order.update({
-        where: { id: orderId },
-        data: {
-          status: "CONFIRMED",
-          paymentStatus: "PAID",
-          cashfreeOrderId: cfOrder.cf_order_id
-        },
-        include: {
-          items: true
-        }
-      });
-
-      return SuccessResponse(res, "Payment verified and order confirmed successfully", confirmedOrder, statusCode.OK);
-    } catch (err: any) {
-      console.error("Cashfree verification error:", err);
-      throw new ErrorResponse(err.message || "Payment verification failed", statusCode.Bad_Request);
-    }
   }
 
   // Razorpay Verification (Fallback / Legacy)
@@ -513,39 +402,7 @@ export const getUserOrderById = asyncHandler<AuthenticatedRequest>(async (req, r
     throw new ErrorResponse("Not authorized to view this order", statusCode.Forbidden);
   }
 
-  // Auto-verify Cashfree order if UNPAID
-  if (order.paymentMethod === "CASHFREE" && order.paymentStatus === "UNPAID") {
-    try {
-      const cfOrder = await getCashfreeOrder(order.orderNumber);
-      if (cfOrder && cfOrder.order_status === "PAID") {
-        order = await prisma.order.update({
-          where: { id },
-          data: {
-            status: "CONFIRMED",
-            paymentStatus: "PAID",
-            cashfreeOrderId: cfOrder.cf_order_id
-          },
-          include: {
-            items: true,
-            address: true
-          }
-        });
-      } else if (cfOrder && cfOrder.order_status === "FAILED") {
-        order = await prisma.order.update({
-          where: { id },
-          data: {
-            paymentStatus: "FAILED"
-          },
-          include: {
-            items: true,
-            address: true
-          }
-        });
-      }
-    } catch (err) {
-      console.error("Auto-verification of Cashfree order failed in details fetch:", err);
-    }
-  }
+
 
   return SuccessResponse(res, "Order details retrieved successfully", order, statusCode.OK);
 });

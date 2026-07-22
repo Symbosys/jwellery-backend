@@ -30,7 +30,6 @@ export const verifyPaymentSchema = z.object({
   razorpayOrderId: z.string().trim().optional(),
   razorpayPaymentId: z.string().trim().optional(),
   razorpaySignature: z.string().trim().optional(),
-  cashfreeOrderId: z.string().trim().optional(),
 });
 
 
