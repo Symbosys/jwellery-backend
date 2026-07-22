@@ -137,10 +137,10 @@ model Product {
   sizes  Json? // e.g. ["S", "M", "L"]
   colors Json? // e.g. ["Red", "Blue"]
 
-  countryOfOrigin String?  @default("India")
+  countryOfOrigin String? @default("India")
   idealFor        String?
   material        String?
-  packOf          Int?     @default(1)
+  packOf          Int?    @default(1)
   productType     String?
 
   rating     Float @default(0)
@@ -269,10 +269,10 @@ model SearchQuery {
 }
 
 model Order {
-  id          String @id @default(uuid())
-  orderNumber String @unique
+  id          String   @id @default(uuid())
+  orderNumber String   @unique
   userId      String
-  user        User   @relation(fields: [userId], references: [id])
+  user        User     @relation(fields: [userId], references: [id])
   addressId   String?
   address     Address? @relation(fields: [addressId], references: [id], onDelete: SetNull)
 
@@ -580,19 +580,19 @@ model Offer {
 }
 
 model Blog {
-  id          String   @id @default(uuid())
-  title       String
-  slug        String   @unique
-  content     String   @db.LongText
-  excerpt     String?  @db.Text
-  image       String?  @db.LongText
-  author      String   @default("Admin")
-  tags        Json?    // e.g. ["protein", "recipes", "fitness"]
-  isActive    Boolean  @default(true)
-  viewsCount  Int      @default(0)
-  readTime    Int?     // in minutes
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String   @id @default(uuid())
+  title      String
+  slug       String   @unique
+  content    String   @db.LongText
+  excerpt    String?  @db.Text
+  image      String?  @db.LongText
+  author     String   @default("Admin")
+  tags       Json? // e.g. ["protein", "recipes", "fitness"]
+  isActive   Boolean  @default(true)
+  viewsCount Int      @default(0)
+  readTime   Int? // in minutes
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@index([slug])
   @@index([isActive])
@@ -600,10 +600,10 @@ model Blog {
 }
 
 model Address {
-  id        String      @id @default(uuid())
-  userId    String
-  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   name      String
   mobile    String
   pincode   String
@@ -631,16 +631,15 @@ enum AddressType {
   OTHER
 }
 
-
 model WebConfig {
-  id               String   @id @default(uuid())
+  id               String  @id @default(uuid())
   // Business Profile
-  storeName        String   @default("")
-  businessEmail    String   @default("")
-  phoneNumber      String   @default("")
+  storeName        String  @default("")
+  businessEmail    String  @default("")
+  phoneNumber      String  @default("")
   website          String?
-  storeDescription String?  @db.Text
-  logo             String?  @db.LongText
+  storeDescription String? @db.Text
+  logo             String? @db.LongText
 
   // Banking Details
   bankName          String?
