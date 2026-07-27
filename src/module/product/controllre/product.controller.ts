@@ -9,37 +9,46 @@ import {
   createProductSchema,
   updateProductSchema,
 } from "../validation/product.validation.js";
-import { uploadToCloudinary } from "../../../config/cloudinary.js";
+import { processBase64Image } from "../../../utils/image.utils.js";
 import { addToCartSchema } from "../../cart/validation/cart.validation.js";
 import type { AuthenticatedRequest } from "../../../middleware/auth.middleware.js";
 
-async function processBase64Image(
-  base64String: string,
-  folder: string,
-): Promise<string> {
-  if (!base64String || !base64String.startsWith("data:image")) {
-    return base64String;
+export function formatProductWithResolvedVariantImages<T extends { variants?: any[] }>(product: T): T {
+  if (!product || !Array.isArray(product.variants)) {
+    return product;
   }
-  const matches = base64String.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
-  if (!matches || matches.length !== 3 || !matches[2]) {
-    return base64String;
-  }
-  const imageBuffer = Buffer.from(matches[2] as string, "base64");
-  const result = await uploadToCloudinary(imageBuffer, folder);
-  return result.secure_url;
+  const formattedVariants = product.variants.map((v) => {
+    let resolvedImage = v.image || null;
+    if (!resolvedImage && Array.isArray(v.attributeValues)) {
+      const attrWithImg = v.attributeValues.find((av: any) => av.image);
+      if (attrWithImg) {
+        resolvedImage = attrWithImg.image;
+      }
+    }
+    return {
+      ...v,
+      resolvedImage,
+    };
+  });
+  return {
+    ...product,
+    variants: formattedVariants,
+  };
 }
 
 export const createProduct = asyncHandler(async (req, res, next) => {
   const validData = createProductSchema.parse(req.body);
   let { variants, image, images, ...productData } = validData;
 
-  image = await processBase64Image(image, "products");
+  const uploadedMainImage = await processBase64Image(image, "products");
+  image = uploadedMainImage || image;
 
   let processedImages: string[] = [];
   if (images && images.length > 0) {
-    processedImages = await Promise.all(
+    const uploadedImages = await Promise.all(
       images.map((img) => processBase64Image(img, "products")),
     );
+    processedImages = uploadedImages.filter((img): img is string => Boolean(img));
   }
 
   if (variants) {
@@ -50,14 +59,47 @@ export const createProduct = asyncHandler(async (req, res, next) => {
     }
   }
 
+  // Filter valid attributeValue IDs and sanitize variant SKUs
+  let validVariants = variants;
+  if (variants && variants.length > 0) {
+    const allAttrValueIds = Array.from(
+      new Set(variants.flatMap((v) => v.attributeValues || [])),
+    );
+    const existingAttrValues = await prisma.attributeValue.findMany({
+      where: { id: { in: allAttrValueIds } },
+      select: { id: true },
+    });
+    const validAttrValIdSet = new Set(existingAttrValues.map((av) => av.id));
+    const usedSkus = new Set<string>();
+
+    validVariants = variants.map((v) => {
+      let cleanSku = v.sku?.trim() || undefined;
+      if (cleanSku) {
+        if (usedSkus.has(cleanSku)) {
+          cleanSku = undefined;
+        } else {
+          usedSkus.add(cleanSku);
+        }
+      }
+
+      return {
+        ...v,
+        sku: cleanSku,
+        attributeValues: (v.attributeValues || []).filter((id) =>
+          validAttrValIdSet.has(id),
+        ),
+      };
+    });
+  }
+
   const product = await prisma.product.create({
     data: {
       ...productData,
       image,
       images: processedImages.length > 0 ? processedImages : undefined,
-      variants: variants
+      variants: validVariants && validVariants.length > 0
         ? {
-            create: variants.map((variant) => ({
+            create: validVariants.map((variant) => ({
               sku: variant.sku || undefined,
               price: variant.price,
               discountPrice: variant.discountPrice,
@@ -88,7 +130,7 @@ export const createProduct = asyncHandler(async (req, res, next) => {
   return SuccessResponse(
     res,
     "Product created successfully",
-    product,
+    formatProductWithResolvedVariantImages(product),
     statusCode.Created,
   );
 });
@@ -245,7 +287,7 @@ export const getAllProducts = asyncHandler(async (req, res, next) => {
     res,
     "Products fetched successfully",
     {
-      products,
+      products: products.map(formatProductWithResolvedVariantImages),
       pagination: {
         total,
         totalPages: Math.ceil(total / limitNum),
@@ -296,7 +338,7 @@ export const getProductById = asyncHandler(async (req, res, next) => {
   return SuccessResponse(
     res,
     "Product fetched successfully",
-    product,
+    formatProductWithResolvedVariantImages(product),
     statusCode.OK,
   );
 });
@@ -307,15 +349,17 @@ export const updateProduct = asyncHandler(async (req, res, next) => {
   let { variants, image, images, ...productData } = validData;
 
   if (image) {
-    image = await processBase64Image(image, "products");
+    const uploadedImage = await processBase64Image(image, "products");
+    image = uploadedImage || image;
   }
 
   let processedImages: string[] | undefined = undefined;
   if (images !== undefined) {
     if (images.length > 0) {
-      processedImages = await Promise.all(
+      const uploadedImages = await Promise.all(
         images.map((img) => processBase64Image(img, "products")),
       );
+      processedImages = uploadedImages.filter((img): img is string => Boolean(img));
     } else {
       processedImages = [];
     }
@@ -334,36 +378,80 @@ export const updateProduct = asyncHandler(async (req, res, next) => {
     throw new ErrorResponse("Product not found", statusCode.Not_Found);
   }
 
+  // Sanitize variant SKUs and verify AttributeValue IDs exist in database
+  let validVariants = variants;
+  if (variants && variants.length > 0) {
+    const allAttrValueIds = Array.from(
+      new Set(variants.flatMap((v) => v.attributeValues || [])),
+    );
+
+    const existingAttrValues = await prisma.attributeValue.findMany({
+      where: { id: { in: allAttrValueIds } },
+      select: { id: true },
+    });
+    const validAttrValIdSet = new Set(existingAttrValues.map((av) => av.id));
+    const usedSkus = new Set<string>();
+
+    validVariants = variants.map((v) => {
+      let cleanSku = v.sku?.trim() || undefined;
+      if (cleanSku) {
+        if (usedSkus.has(cleanSku)) {
+          cleanSku = undefined;
+        } else {
+          usedSkus.add(cleanSku);
+        }
+      }
+
+      return {
+        ...v,
+        sku: cleanSku,
+        attributeValues: (v.attributeValues || []).filter((id) =>
+          validAttrValIdSet.has(id),
+        ),
+      };
+    });
+  }
+
   const updatedProduct = await prisma.$transaction(async (tx) => {
-    if (variants !== undefined) {
-      // Delete existing variants
+    if (validVariants !== undefined) {
+      // 1. Delete existing variants
       await tx.productVariant.deleteMany({
         where: { productId: id },
       });
     }
 
-    const updated = await tx.product.update({
+    // 2. Update main product properties
+    await tx.product.update({
       where: { id },
       data: {
         ...productData,
         ...(image ? { image } : {}),
         ...(processedImages !== undefined ? { images: processedImages } : {}),
-        variants:
-          variants && variants.length > 0
-            ? {
-                create: variants.map((variant) => ({
-                  sku: variant.sku || undefined,
-                  price: variant.price,
-                  discountPrice: variant.discountPrice,
-                  quantity: variant.quantity,
-                  image: variant.image,
-                  attributeValues: {
-                    connect: variant.attributeValues.map((id) => ({ id })),
-                  },
-                })),
-              }
-            : undefined,
       },
+    });
+
+    // 3. Create new variants
+    if (validVariants && validVariants.length > 0) {
+      for (const variant of validVariants) {
+        await tx.productVariant.create({
+          data: {
+            product: { connect: { id } },
+            sku: variant.sku || null,
+            price: variant.price,
+            discountPrice: variant.discountPrice,
+            quantity: variant.quantity,
+            image: variant.image || null,
+            attributeValues: {
+              connect: variant.attributeValues.map((avId) => ({ id: avId })),
+            },
+          },
+        });
+      }
+    }
+
+    // 4. Return updated product with full relation includes
+    return tx.product.findUnique({
+      where: { id },
       include: {
         category: true,
         subCategory: true,
@@ -378,13 +466,16 @@ export const updateProduct = asyncHandler(async (req, res, next) => {
         },
       },
     });
-    return updated;
   });
+
+  if (!updatedProduct) {
+    throw new ErrorResponse("Failed to update product", statusCode.Internal_Server_Error);
+  }
 
   return SuccessResponse(
     res,
     "Product updated successfully",
-    updatedProduct,
+    formatProductWithResolvedVariantImages(updatedProduct),
     statusCode.OK,
   );
 });

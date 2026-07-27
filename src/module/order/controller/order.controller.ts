@@ -113,11 +113,11 @@ export const createOrder = asyncHandler<AuthenticatedRequest>(async (req, res, n
     });
   }
 
-  // Calculate fees (simple logic)
-  const shippingCharge = subtotal > 1500 ? 0 : 100;
-  const tax = Number((subtotal * 0.05).toFixed(2)); // 5% tax
+  // Calculate fees (matching frontend Checkout & Cart)
+  const shippingCharge = subtotal >= 500 ? 0 : 25;
+  const tax = Number((subtotal * 0.05).toFixed(2)); // 5% GST
   const discount = 0; // standard 0 discount
-  const totalAmount = subtotal + shippingCharge + tax - discount;
+  const totalAmount = Number((subtotal + shippingCharge + tax - discount).toFixed(2));
 
   const orderNumber = generateOrderNumber();
 

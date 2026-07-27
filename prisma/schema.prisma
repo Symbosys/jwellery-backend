@@ -215,6 +215,7 @@ model AttributeValue {
   attributeId String
   attribute   Attribute        @relation(fields: [attributeId], references: [id], onDelete: Cascade)
   value       String
+  image        String?
   variants    ProductVariant[]
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt

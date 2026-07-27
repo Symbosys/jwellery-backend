@@ -12,7 +12,7 @@ export const variantSchema = z.object({
     .max(9999999999999, "Discount price is too large")
     .optional(),
   quantity: z.number().int().min(0).default(0),
-  image: z.string().optional().or(z.literal("")),
+  image: z.string().optional().nullable().or(z.literal("")),
   attributeValues: z
     .array(z.string().uuid("Attribute Value ID must be a valid UUID"))
     .default([]),

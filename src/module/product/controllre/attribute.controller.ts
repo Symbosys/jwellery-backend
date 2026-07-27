@@ -2,7 +2,12 @@ import { asyncHandler } from "../../../middleware/error.middleware.js";
 import { ErrorResponse, SuccessResponse } from "../../../utils/response.utils.js";
 import { statusCode } from "../../../types/types.js";
 import prisma from "../../../config/prisma.js";
-import { createAttributeSchema, addAttributeValuesSchema } from "../validation/attribute.validation.js";
+import {
+    createAttributeSchema,
+    addAttributeValuesSchema,
+    updateAttributeValueSchema,
+} from "../validation/attribute.validation.js";
+import { processBase64Image } from "../../../utils/image.utils.js";
 
 export const getAllAttributes = asyncHandler(async (req, res, next) => {
     const attributes = await prisma.attribute.findMany({
@@ -28,11 +33,24 @@ export const createAttribute = asyncHandler(async (req, res, next) => {
         throw new ErrorResponse("Attribute with this name already exists", statusCode.Bad_Request);
     }
 
+    let valuesToCreate: Array<{ value: string; image?: string | null }> = [];
+    if (validData.values && validData.values.length > 0) {
+        valuesToCreate = await Promise.all(
+            validData.values.map(async (item) => {
+                if (typeof item === "string") {
+                    return { value: item, image: null };
+                }
+                const imageUrl = item.image ? await processBase64Image(item.image, "attributes/values") : null;
+                return { value: item.value, image: imageUrl };
+            })
+        );
+    }
+
     const attribute = await prisma.attribute.create({
         data: {
             name: validData.name,
-            values: validData.values ? {
-                create: validData.values.map(val => ({ value: val }))
+            values: valuesToCreate.length > 0 ? {
+                create: valuesToCreate
             } : undefined
         },
         include: {
@@ -60,24 +78,61 @@ export const addAttributeValues = asyncHandler(async (req, res, next) => {
 
     // Upsert values to avoid duplicates
     const createdValues = await Promise.all(
-        validData.values.map(val => 
-            prisma.attributeValue.upsert({
+        validData.values.map(async (item) => {
+            const valStr = typeof item === "string" ? item : item.value;
+            const rawImg = typeof item === "string" ? null : item.image;
+            const imageUrl = rawImg ? await processBase64Image(rawImg, "attributes/values") : null;
+
+            return prisma.attributeValue.upsert({
                 where: {
                     attributeId_value: {
                         attributeId: id,
-                        value: val
+                        value: valStr
                     }
                 },
-                update: {},
+                update: imageUrl !== null ? { image: imageUrl } : {},
                 create: {
                     attributeId: id,
-                    value: val
+                    value: valStr,
+                    image: imageUrl
                 }
-            })
-        )
+            });
+        })
     );
 
     return SuccessResponse(res, "Attribute values added successfully", createdValues, statusCode.Created);
+});
+
+export const updateAttributeValue = asyncHandler(async (req, res, next) => {
+    const { valueId } = req.params;
+    if (!valueId) {
+        throw new ErrorResponse("Attribute value ID is required", statusCode.Bad_Request);
+    }
+
+    const validData = updateAttributeValueSchema.parse(req.body);
+
+    const existingValue = await prisma.attributeValue.findUnique({
+        where: { id: valueId }
+    });
+
+    if (!existingValue) {
+        throw new ErrorResponse("Attribute value not found", statusCode.Not_Found);
+    }
+
+    let imageUrl: string | null | undefined = undefined;
+    if (validData.image !== undefined) {
+        imageUrl = validData.image ? await processBase64Image(validData.image, "attributes/values") : null;
+    }
+
+    const updatedValue = await prisma.attributeValue.update({
+        where: { id: valueId },
+        data: {
+            ...(validData.value ? { value: validData.value } : {}),
+            ...(imageUrl !== undefined ? { image: imageUrl } : {}),
+        }
+    });
+
+    return SuccessResponse(res, "Attribute value updated successfully", updatedValue, statusCode.OK);
 });
 
 export const deleteAttribute = asyncHandler(async (req, res, next) => {
@@ -121,3 +176,4 @@ export const deleteAttributeValue = asyncHandler(async (req, res, next) => {
 
     return SuccessResponse(res, "Attribute value deleted successfully", null, statusCode.OK);
 });
+

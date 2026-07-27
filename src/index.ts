@@ -30,8 +30,8 @@ const app = express();
 const allowedOrigins = [
   "https://jwellery-frontend-seven.vercel.app",
   "https://jwellery-admin-delta.vercel.app",
-  "https://admin.fuelandnutrients.com",
-  "https://fuelandnutrients.com"
+  "https://https://admin.sakhio.com/",
+  "https://sakio.com",
 ];
 
 app.use(
@@ -39,10 +39,12 @@ app.use(
     origin: (origin, callback) => {
       // Allow requests with no origin (like mobile apps, curl, postman)
       if (!origin) return callback(null, true);
-      
-      const isAllowed = 
+
+      const isAllowed =
         allowedOrigins.includes(origin) ||
-        /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?$/.test(origin) ||
+        /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?$/.test(
+          origin,
+        ) ||
         /^https:\/\/([a-zA-Z0-9-]+\.)*vercel\.app$/.test(origin);
 
       if (isAllowed) {
@@ -54,8 +56,13 @@ app.use(
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
-  })
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "Accept",
+    ],
+  }),
 );
 
 app.use(express.json({ limit: "50mb" })); // ✅ REQUIRED
