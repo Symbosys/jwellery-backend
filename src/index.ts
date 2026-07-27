@@ -30,40 +30,50 @@ const app = express();
 const allowedOrigins = [
   "https://jwellery-frontend-seven.vercel.app",
   "https://jwellery-admin-delta.vercel.app",
-  "https://admin.sakhio.com/",
+  "https://admin.sakhio.com",
+  "https://sakhio.com",
   "https://sakio.com",
+  "http://localhost:3000",
+  "http://localhost:5173",
+  "http://localhost:4000",
 ];
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps, curl, postman)
-      if (!origin) return callback(null, true);
+const corsOptions: cors.CorsOptions = {
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps, curl, postman)
+    if (!origin) return callback(null, true);
 
-      const isAllowed =
-        allowedOrigins.includes(origin) ||
-        /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?$/.test(
-          origin,
-        ) ||
-        /^https:\/\/([a-zA-Z0-9-]+\.)*vercel\.app$/.test(origin);
+    const cleanOrigin = origin.replace(/\/+$/, "");
 
-      if (isAllowed) {
-        callback(null, true);
-      } else {
-        // Pass false to withhold CORS headers without throwing a 500 error
-        callback(null, false);
-      }
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allowedHeaders: [
-      "Content-Type",
-      "Authorization",
-      "X-Requested-With",
-      "Accept",
-    ],
-  }),
-);
+    const isAllowed =
+      allowedOrigins.includes(cleanOrigin) ||
+      /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?$/.test(
+        cleanOrigin,
+      ) ||
+      /^https:\/\/([a-zA-Z0-9-]+\.)*vercel\.app$/.test(cleanOrigin) ||
+      /^https:\/\/([a-zA-Z0-9-]+\.)*(sakhio\.com|sakio\.com)$/.test(cleanOrigin);
+
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      console.warn(`[CORS Blocked] Origin not allowed: ${origin}`);
+      callback(null, false);
+    }
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "X-Requested-With",
+    "Accept",
+    "Origin",
+    "Access-Control-Allow-Origin",
+  ],
+  optionsSuccessStatus: 200,
+};
+
+app.use(cors(corsOptions));
 
 app.use(express.json({ limit: "50mb" })); // ✅ REQUIRED
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
