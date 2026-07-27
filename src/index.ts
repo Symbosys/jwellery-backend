@@ -30,7 +30,7 @@ const app = express();
 const allowedOrigins = [
   "https://jwellery-frontend-seven.vercel.app",
   "https://jwellery-admin-delta.vercel.app",
-  "https://https://admin.sakhio.com/",
+  "https://admin.sakhio.com/",
   "https://sakio.com",
 ];
 
