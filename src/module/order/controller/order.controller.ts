@@ -2,8 +2,11 @@ import prisma from "../../../config/prisma.js";
 import { asyncHandler } from "../../../middleware/error.middleware.js";
 import { ErrorResponse, SuccessResponse } from "../../../utils/response.utils.js";
 import { statusCode } from "../../../types/types.js";
-import { createOrderSchema, updateOrderStatusSchema, updatePaymentStatusSchema } from "../validation/order.validation.js";
+import { createOrderSchema, updateOrderStatusSchema, updatePaymentStatusSchema, updateOrderAddressSchema } from "../validation/order.validation.js";
 import type { AuthenticatedRequest } from "../../../middleware/auth.middleware.js";
+import { createShiprocketOrder, updateShiprocketOrderAddress, cancelShiprocketOrder } from "../services/shiprocket.service.js";
+
+
 
 // Helper to generate unique order number
 const generateOrderNumber = (): string => {
@@ -186,6 +189,26 @@ export const createOrder = asyncHandler<AuthenticatedRequest>(async (req, res, n
     return newOrder;
   });
 
+  // Trigger Shiprocket order placement
+  try {
+    const userObj = await prisma.user.findUnique({ where: { id: userId } });
+    const fullOrder = await prisma.order.findUnique({
+      where: { id: order.id },
+      include: {
+        items: {
+          include: { product: true, variant: true }
+        }
+      }
+    });
+    if (fullOrder) {
+      createShiprocketOrder(fullOrder, userObj?.email || undefined).catch((err) => {
+        console.error("Async Shiprocket placement error:", err);
+      });
+    }
+  } catch (srError) {
+    console.error("Error preparing Shiprocket order placement:", srError);
+  }
+
   return SuccessResponse(res, "Order placed successfully", order, statusCode.Created);
 });
 
@@ -312,8 +335,20 @@ export const cancelOrder = asyncHandler<AuthenticatedRequest>(async (req, res, n
     return cancelledOrder;
   });
 
+  // Sync cancellation to Shiprocket if order exists on Shiprocket
+  if (order.shiprocketOrderId) {
+    try {
+      cancelShiprocketOrder([order.shiprocketOrderId]).catch((err) => {
+        console.error("Async Shiprocket cancellation error:", err);
+      });
+    } catch (srErr) {
+      console.error("Error triggering Shiprocket cancellation:", srErr);
+    }
+  }
+
   return SuccessResponse(res, "Order cancelled successfully", updatedOrder, statusCode.OK);
 });
+
 
 // 5. Update order status (Admin/Vendor function)
 export const updateOrderStatus = asyncHandler<AuthenticatedRequest>(async (req, res, next) => {
@@ -400,8 +435,20 @@ export const updateOrderStatus = asyncHandler<AuthenticatedRequest>(async (req, 
     });
   }
 
+  // Sync cancellation to Shiprocket if transition is to CANCELLED and order exists on Shiprocket
+  if (status === "CANCELLED" && order.shiprocketOrderId) {
+    try {
+      cancelShiprocketOrder([order.shiprocketOrderId]).catch((err) => {
+        console.error("Async Shiprocket cancellation error in status update:", err);
+      });
+    } catch (srErr) {
+      console.error("Error triggering Shiprocket cancellation in status update:", srErr);
+    }
+  }
+
   return SuccessResponse(res, "Order status updated successfully", updatedOrder, statusCode.OK);
 });
+
 
 // 6. Update payment status (Admin/Vendor function)
 export const updatePaymentStatus = asyncHandler<AuthenticatedRequest>(async (req, res, next) => {
@@ -442,3 +489,100 @@ export const getAllOrders = asyncHandler<AuthenticatedRequest>(async (req, res, 
 
   return SuccessResponse(res, "All orders retrieved successfully", orders, statusCode.OK);
 });
+
+// 8. Update order shipping address (User or Admin/Vendor function)
+export const updateOrderAddress = asyncHandler<AuthenticatedRequest>(async (req, res, next) => {
+  const { id } = req.params;
+  if (!id) {
+    throw new ErrorResponse("Order ID is required", statusCode.Bad_Request);
+  }
+
+  const validData = updateOrderAddressSchema.parse(req.body);
+  const {
+    shippingName,
+    shippingPhone,
+    shippingAddress,
+    shippingAddress2,
+    shippingCity,
+    shippingState,
+    shippingCountry,
+    shippingPincode,
+  } = validData;
+
+  const order = await prisma.order.findUnique({
+    where: { id },
+  });
+
+  if (!order) {
+    throw new ErrorResponse("Order not found", statusCode.Not_Found);
+  }
+
+  // If user authenticated (non-admin), check ownership
+  if (req.user && order.userId !== req.user.id) {
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    if (user?.role !== "ADMIN") {
+      throw new ErrorResponse("Not authorized to update this order's address", statusCode.Forbidden);
+    }
+  }
+
+
+  // Check if order status permits address update
+  if (["SHIPPED", "DELIVERED", "CANCELLED", "RETURNED"].includes(order.status)) {
+    throw new ErrorResponse(
+      `Cannot update shipping address because order is already ${order.status.toLowerCase()}`,
+      statusCode.Bad_Request
+    );
+  }
+
+  // 1. Update address in local Database
+  const updatedOrder = await prisma.order.update({
+    where: { id },
+    data: {
+      shippingName,
+      shippingPhone,
+      shippingAddress,
+      shippingCity,
+      shippingState,
+      shippingPincode,
+    },
+    include: {
+      items: true,
+      address: true,
+    },
+  });
+
+  // 2. If order has been synced to Shiprocket (shiprocketOrderId exists), sync address update to Shiprocket
+  let shiprocketSyncStatus: { success: boolean; data?: any; error?: string } | null = null;
+  if (order.shiprocketOrderId) {
+    try {
+      const cleanPhone = String(shippingPhone).replace(/\D/g, "").slice(-10);
+      const pincodeNum = parseInt(String(shippingPincode).replace(/\D/g, ""), 10) || 110002;
+      const srOrderId = parseInt(order.shiprocketOrderId, 10) || order.shiprocketOrderId;
+
+      const srResult = await updateShiprocketOrderAddress({
+        order_id: srOrderId,
+        shipping_customer_name: shippingName,
+        shipping_phone: cleanPhone,
+        shipping_address: shippingAddress,
+        shipping_address_2: shippingAddress2 || "",
+        shipping_city: shippingCity,
+        shipping_state: shippingState,
+        shipping_country: shippingCountry || "India",
+        shipping_pincode: pincodeNum,
+      });
+
+      shiprocketSyncStatus = srResult;
+    } catch (srErr) {
+      console.error("[Shiprocket] Address sync error:", srErr);
+      shiprocketSyncStatus = { success: false, error: String(srErr) };
+    }
+  }
+
+  return SuccessResponse(
+    res,
+    "Order address updated successfully",
+    { order: updatedOrder, shiprocketSync: shiprocketSyncStatus },
+    statusCode.OK
+  );
+});
+

@@ -5,6 +5,9 @@ import { statusCode } from "../../../types/types.js";
 import { createOrderSchema, verifyPaymentSchema } from "../validation/order.validation.js";
 import type { AuthenticatedRequest } from "../../../middleware/auth.middleware.js";
 import { createRazorpayOrder, verifyRazorpaySignature } from "../services/razorpay.service.js";
+import { createShiprocketOrder, cancelShiprocketOrder, createShiprocketReturnOrder } from "../services/shiprocket.service.js";
+
+
 
 // Helper to generate unique order number
 const generateOrderNumber = (): string => {
@@ -282,6 +285,27 @@ export const createUserOrder = asyncHandler<AuthenticatedRequest>(async (req, re
 
 
 
+  // Trigger Shiprocket order placement for COD order
+  try {
+    const userObj = await prisma.user.findUnique({ where: { id: userId } });
+    const fullOrder = await prisma.order.findUnique({
+      where: { id: order.id },
+      include: {
+        items: {
+          include: { product: true, variant: true }
+        }
+      }
+    });
+    if (fullOrder) {
+      // Fire and log shiprocket placement
+      createShiprocketOrder(fullOrder, userObj?.email || undefined).catch((err) => {
+        console.error("Async Shiprocket COD placement error:", err);
+      });
+    }
+  } catch (srError) {
+    console.error("Error preparing Shiprocket COD order placement:", srError);
+  }
+
   // Cash on Delivery (COD) Success Response
   return SuccessResponse(res, "Order placed successfully (Cash on Delivery)", order, statusCode.Created);
 });
@@ -346,6 +370,26 @@ export const verifyPayment = asyncHandler<AuthenticatedRequest>(async (req, res,
       items: true
     }
   });
+
+  // Trigger Shiprocket order placement for Prepaid order
+  try {
+    const userObj = await prisma.user.findUnique({ where: { id: userId } });
+    const fullOrder = await prisma.order.findUnique({
+      where: { id: confirmedOrder.id },
+      include: {
+        items: {
+          include: { product: true, variant: true }
+        }
+      }
+    });
+    if (fullOrder) {
+      createShiprocketOrder(fullOrder, userObj?.email || undefined).catch((err) => {
+        console.error("Async Shiprocket Prepaid placement error:", err);
+      });
+    }
+  } catch (srError) {
+    console.error("Error preparing Shiprocket Prepaid order placement:", srError);
+  }
 
   return SuccessResponse(res, "Payment verified and order confirmed successfully", confirmedOrder, statusCode.OK);
 });
@@ -482,5 +526,116 @@ export const cancelUserOrder = asyncHandler<AuthenticatedRequest>(async (req, re
     return updatedOrder;
   });
 
+  // Sync cancellation to Shiprocket if order exists on Shiprocket
+  if (order.shiprocketOrderId) {
+    try {
+      cancelShiprocketOrder([order.shiprocketOrderId]).catch((err) => {
+        console.error("Async Shiprocket cancellation error:", err);
+      });
+    } catch (srErr) {
+      console.error("Error triggering Shiprocket cancellation:", srErr);
+    }
+  }
+
   return SuccessResponse(res, "Order cancelled successfully", cancelledOrder, statusCode.OK);
 });
+
+/**
+ * 6. Return order by user (only if DELIVERED)
+ */
+export const returnUserOrder = asyncHandler<AuthenticatedRequest>(async (req, res, next) => {
+  const userId = req.user?.id;
+  const { id } = req.params;
+  const { reason } = req.body || {};
+
+  if (!id) {
+    throw new ErrorResponse("Order ID is required", statusCode.Bad_Request);
+  }
+
+  const order = await prisma.order.findUnique({
+    where: { id },
+    include: {
+      items: {
+        include: {
+          product: true,
+          variant: true,
+        },
+      },
+      user: true,
+    },
+  });
+
+  if (!order) {
+    throw new ErrorResponse("Order not found", statusCode.Not_Found);
+  }
+
+  // If user authenticated (non-admin), check ownership
+  if (userId && req.user && order.userId !== userId) {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (user?.role !== "ADMIN") {
+      throw new ErrorResponse("Not authorized to return this order", statusCode.Forbidden);
+    }
+  }
+
+  // Only allow return if order status is DELIVERED
+  if (order.status !== "DELIVERED") {
+    throw new ErrorResponse(
+      `Cannot return order because current status is ${order.status.toLowerCase()}`,
+      statusCode.Bad_Request
+    );
+  }
+
+  // Update order status to RETURNED & restore stock quantities
+  const returnedOrder = await prisma.$transaction(async (tx) => {
+    const updated = await tx.order.update({
+      where: { id },
+      data: {
+        status: "RETURNED",
+        note: reason ? `Return Reason: ${reason}` : order.note,
+      },
+      include: {
+        items: true,
+      },
+    });
+
+    // Restore stock quantities
+    for (const item of order.items) {
+      if (item.variantId && item.variant) {
+        await tx.productVariant.update({
+          where: { id: item.variantId },
+          data: {
+            quantity: item.variant.quantity + item.quantity,
+          },
+        });
+      } else if (item.product) {
+        await tx.product.update({
+          where: { id: item.productId },
+          data: {
+            quantity: item.product.quantity + item.quantity,
+          },
+        });
+      }
+    }
+
+    return updated;
+  });
+
+  // Trigger Shiprocket Return Order Creation
+  let shiprocketSync = null;
+  try {
+    const userObj = req.user ? await prisma.user.findUnique({ where: { id: req.user.id } }) : null;
+    shiprocketSync = await createShiprocketReturnOrder(order, userObj?.email || undefined, reason);
+  } catch (srErr) {
+    console.error("Error creating Shiprocket return order:", srErr);
+    shiprocketSync = { success: false, error: String(srErr) };
+  }
+
+  return SuccessResponse(
+    res,
+    "Order return initiated successfully",
+    { order: returnedOrder, shiprocketReturn: shiprocketSync },
+    statusCode.OK
+  );
+});
+
+

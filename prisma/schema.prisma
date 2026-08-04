@@ -305,6 +305,9 @@ model Order {
   razorpayPaymentId String?
   razorpaySignature String?
 
+  shiprocketOrderId   String?
+  shiprocketShipmentId String?
+
   placedAt    DateTime  @default(now())
   shippedAt   DateTime?
   deliveredAt DateTime?

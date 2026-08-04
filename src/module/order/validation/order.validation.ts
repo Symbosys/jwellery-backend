@@ -32,4 +32,16 @@ export const verifyPaymentSchema = z.object({
   razorpaySignature: z.string().trim().optional(),
 });
 
+export const updateOrderAddressSchema = z.object({
+  shippingName: z.string({ message: "Shipping name is required" }).min(2, "Name must be at least 2 characters").trim(),
+  shippingPhone: z.string({ message: "Shipping phone is required" }).min(10, "Phone number must be at least 10 digits").trim(),
+  shippingAddress: z.string({ message: "Shipping address is required" }).min(5, "Address must be at least 5 characters").trim(),
+  shippingAddress2: z.string().optional(),
+  shippingCity: z.string({ message: "Shipping city is required" }).min(2, "City must be at least 2 characters").trim(),
+  shippingState: z.string({ message: "Shipping state is required" }).min(2, "State must be at least 2 characters").trim(),
+  shippingCountry: z.string().optional().default("India"),
+  shippingPincode: z.string({ message: "Shipping pincode is required" }).min(5, "Pincode must be at least 5 characters").trim(),
+});
+
+
 

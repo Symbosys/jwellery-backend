@@ -29,6 +29,11 @@ const ENV = {
     CASHFREE_CLIENT_ID: process.env.CASHFREE_CLIENT_ID || "",
     CASHFREE_CLIENT_SECRET: process.env.CASHFREE_CLIENT_SECRET || "",
     CASHFREE_ENV: process.env.CASHFREE_ENV || "SANDBOX",
+
+    // Shiprocket Credentials
+    SHIPROCKET_EMAIL: (process.env.SHIPROCKET_EMAIL || "").trim(),
+    SHIPROCKET_PASSWORD: (process.env.SHIPROCKET_PASSWORD || "").trim(),
+    SHIPROCKET_PICKUP_LOCATION: (process.env.SHIPROCKET_PICKUP_LOCATION || "Primary").trim(),
 }
 
 export default ENV;
