@@ -1,6 +1,11 @@
 import bcrypt from "bcryptjs";
 import ENV from "../../config/env.js";
-import { LoginValidator, OtpValidator, AdminRegisterValidator, AdminLoginValidator } from "../validator/auth.validator.js";
+import {
+  LoginValidator,
+  OtpValidator,
+  AdminRegisterValidator,
+  AdminLoginValidator,
+} from "../validator/auth.validator.js";
 import { asyncHandler } from "../../middleware/error.middleware.js";
 import { ErrorResponse, SuccessResponse } from "../../utils/response.utils.js";
 import { statusCode } from "../../types/types.js";
@@ -21,7 +26,7 @@ export const requestOtp = asyncHandler(async (req, res, next) => {
   if (!/^\+?\d{10,15}$/.test(validData.phoneNumber)) {
     throw new ErrorResponse(
       "Invalid phone number format",
-      statusCode.Bad_Request
+      statusCode.Bad_Request,
     );
   }
 
@@ -42,7 +47,7 @@ export const requestOtp = asyncHandler(async (req, res, next) => {
   if (attempts >= MAX_DAILY_OTP_REQUESTS) {
     throw new ErrorResponse(
       `Maximum ${MAX_DAILY_OTP_REQUESTS} OTP requests per day reached`,
-      429
+      429,
     );
   }
 
@@ -94,10 +99,9 @@ export const requestOtp = asyncHandler(async (req, res, next) => {
     res,
     `OTP sent successfully. Your OTP is ${otp}`,
     { phoneNumber: validData.phoneNumber, otp },
-    statusCode.OK
+    statusCode.OK,
   );
 });
-
 
 const COOLDOWN_SECONDS = 30;
 const MAX_ATTEMPTS = 5;
@@ -111,14 +115,16 @@ export const verifyOtp = asyncHandler(async (req, res, next) => {
       where: { phoneNumber: validData.phoneNumber },
     });
 
-    if (!storedOtp) throw new ErrorResponse("OTP not found", statusCode.Not_Found);
+    if (!storedOtp)
+      throw new ErrorResponse("OTP not found", statusCode.Not_Found);
 
     if (new Date() > storedOtp.expiresAt) {
       await tx.otp.delete({ where: { id: storedOtp.id } });
       throw new ErrorResponse("OTP has expired", statusCode.Bad_Request);
     }
 
-    if (storedOtp.isUsed) throw new ErrorResponse("OTP already used", statusCode.Bad_Request);
+    if (storedOtp.isUsed)
+      throw new ErrorResponse("OTP already used", statusCode.Bad_Request);
 
     // Check cooldown between verification attempts
     // if (storedOtp.lastAttemptedAt) {
@@ -132,7 +138,8 @@ export const verifyOtp = asyncHandler(async (req, res, next) => {
     // }
 
     const isMatch = await bcrypt.compare(validData.otp, storedOtp.otp);
-    if (!isMatch) throw new ErrorResponse("Invalid OTP", statusCode.Bad_Request);
+    if (!isMatch)
+      throw new ErrorResponse("Invalid OTP", statusCode.Bad_Request);
 
     // ✅ Mark OTP as used
     await tx.otp.update({
@@ -197,7 +204,6 @@ export const verifyOtp = asyncHandler(async (req, res, next) => {
     });
 });
 
-
 export const logout = asyncHandler(async (req, res, next) => {
   // ✅ Clear cookies and headers securely
   res.clearCookie("user_token", {
@@ -226,12 +232,15 @@ export const adminRegister = asyncHandler(async (req, res, next) => {
   });
 
   if (existingUser) {
-    throw new ErrorResponse("User with this email already exists", statusCode.Conflict);
+    throw new ErrorResponse(
+      "User with this email already exists",
+      statusCode.Conflict,
+    );
   }
 
   const hashedPassword = await bcrypt.hash(validData.password, 10);
 
-  const admin = await prisma.user.create({
+  const admin = (await prisma.user.create({
     data: {
       email: validData.email,
       password: hashedPassword,
@@ -239,9 +248,13 @@ export const adminRegister = asyncHandler(async (req, res, next) => {
       lastName: validData.lastName,
       role: "ADMIN",
     } as any,
-  }) as any;
+  })) as any;
 
-  const token = JWT.generateToken({ email: admin.email || "", id: admin.id.toString(), role: admin.role });
+  const token = JWT.generateToken({
+    email: admin.email || "",
+    id: admin.id.toString(),
+    role: admin.role,
+  });
 
   return res
     .status(statusCode.Created)
@@ -269,14 +282,17 @@ export const adminRegister = asyncHandler(async (req, res, next) => {
 export const adminLogin = asyncHandler(async (req, res, next) => {
   const validData = AdminLoginValidator.parse(req.body);
 
-  const user = await prisma.user.findUnique({
+  const user = (await prisma.user.findUnique({
     where: {
       email: validData.email,
     },
-  }) as any;
+  })) as any;
 
   if (!user) {
-    throw new ErrorResponse("Invalid email or password", statusCode.Unauthorized);
+    throw new ErrorResponse(
+      "Invalid email or password",
+      statusCode.Unauthorized,
+    );
   }
 
   if (user.role !== "ADMIN") {
@@ -289,10 +305,17 @@ export const adminLogin = asyncHandler(async (req, res, next) => {
 
   const isMatch = await bcrypt.compare(validData.password, user.password);
   if (!isMatch) {
-    throw new ErrorResponse("Invalid email or password", statusCode.Unauthorized);
+    throw new ErrorResponse(
+      "Invalid email or password",
+      statusCode.Unauthorized,
+    );
   }
 
-  const token = JWT.generateToken({ email: user.email || "", id: user.id.toString(), role: user.role });
+  const token = JWT.generateToken({
+    email: user.email || "",
+    id: user.id.toString(),
+    role: user.role,
+  });
 
   return res
     .status(statusCode.OK)

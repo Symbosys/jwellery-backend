@@ -6,7 +6,7 @@ import { ErrorResponse, SuccessResponse } from "../../../utils/response.utils.js
 import { statusCode } from "../../../types/types.js";
 import prisma from "../../../config/prisma.js";
 import { JWT } from "../../../utils/jwt.js";
-import { generateOtp } from "../../../utils/otp.js";
+import { generateOtp, sendOtpSMS } from "../../../utils/otp.js";
 
 const OTP_LENGTH = 4;
 const OTP_EXPIRATION_MINUTES = 5;
@@ -68,6 +68,8 @@ export const requestOtp = asyncHandler(async (req, res, next) => {
 
   const hashedOtp = await bcrypt.hash(otp, 10);
 
+  await sendOtpSMS(validData.phoneNumber, otp)
+
   // Create or update OTP record
   await prisma.otp.upsert({
     where: { phoneNumber: validData.phoneNumber },
@@ -88,12 +90,11 @@ export const requestOtp = asyncHandler(async (req, res, next) => {
     },
   });
 
-  console.log("OTP", otp);
 
   return SuccessResponse(
     res,
-    `OTP sent successfully. Your OTP is ${otp}`,
-    { phoneNumber: validData.phoneNumber, otp },
+    `OTP sent successfully`,
+    { phoneNumber: validData.phoneNumber },
     statusCode.OK
   );
 });

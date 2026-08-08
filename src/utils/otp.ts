@@ -1,10 +1,9 @@
-import crypto from "crypto"; 
+import crypto from "crypto";
 
 export const generateOtp = (): string => {
   const otp = crypto.randomInt(1000, 10000).toString();
   return otp;
 };
-
 
 export async function sendOtpSMS(mobile: string, otp: string) {
   const url = "http://msg.icloudsms.com/rest/services/sendSMS/sendGroupSms";
@@ -38,10 +37,9 @@ export async function sendOtpSMS(mobile: string, otp: string) {
       method: "GET",
     });
     const data = await response.text();
-    console.log("SMS API Response:", data);
     return { success: response.ok, data };
   } catch (error) {
     console.error("SMS API Error:", error);
     return { success: false, error };
   }
-}
+}
