@@ -138,11 +138,19 @@ export const createProduct = asyncHandler(async (req, res, next) => {
 export const getAllProducts = asyncHandler(async (req, res, next) => {
   const {
     categoryId,
+    category,
     subCategoryId,
+    subcategory,
+    brandId,
+    brand,
     minPrice,
     maxPrice,
+    priceRange,
+    stock,
+    inStock,
+    weight,
     search,
-    brandId,
+    q,
     page = "1",
     limit = "20",
     sort = "newest",
@@ -155,40 +163,94 @@ export const getAllProducts = asyncHandler(async (req, res, next) => {
 
   const where: any = {};
 
-  // Category filter
-  if (categoryId) {
-    where.categoryId = categoryId as string;
+  // Category filter (supports ID, Name, or Slug)
+  const catVal = (categoryId || category) as string;
+  if (catVal) {
+    where.category = {
+      OR: [
+        { id: catVal },
+        { name: { equals: catVal } },
+        { slug: { equals: catVal } },
+      ],
+    };
   }
 
-  // SubCategory filter
-  if (subCategoryId) {
-    where.subCategoryId = subCategoryId as string;
+  // SubCategory filter (supports ID or Name)
+  const subCatVal = (subCategoryId || subcategory) as string;
+  if (subCatVal) {
+    where.subCategory = {
+      OR: [
+        { id: subCatVal },
+        { name: { equals: subCatVal } },
+      ],
+    };
   }
 
-  // Brand filter
-  if (brandId) {
-    where.brandId = brandId as string;
+  // Brand filter (supports ID, Name, or Slug)
+  const brandVal = (brandId || brand) as string;
+  if (brandVal) {
+    where.brand = {
+      OR: [
+        { id: brandVal },
+        { name: { equals: brandVal } },
+        { slug: { equals: brandVal } },
+      ],
+    };
   }
 
   // Search across name, description, brand, and category name
-  if (search) {
-    const searchStr = search as string;
+  const searchStr = (search || q) as string;
+  if (searchStr && searchStr.trim()) {
+    const trimmed = searchStr.trim();
     where.OR = [
-      { name: { contains: searchStr } },
-      { description: { contains: searchStr } },
-      { brand: { name: { contains: searchStr } } },
-      { category: { name: { contains: searchStr } } },
+      { name: { contains: trimmed } },
+      { description: { contains: trimmed } },
+      { brand: { name: { contains: trimmed } } },
+      { category: { name: { contains: trimmed } } },
     ];
   }
 
   // Price range filtering
-  if (minPrice || maxPrice) {
-    where.price = {};
-    if (minPrice) {
-      where.price.gte = parseFloat(minPrice as string);
+  let effectiveMinPrice = minPrice ? parseFloat(minPrice as string) : undefined;
+  let effectiveMaxPrice = maxPrice ? parseFloat(maxPrice as string) : undefined;
+
+  if (priceRange) {
+    const pr = priceRange as string;
+    if (pr === "under-50k") effectiveMaxPrice = 50000;
+    else if (pr === "50k-100k") {
+      effectiveMinPrice = 50000;
+      effectiveMaxPrice = 100000;
+    } else if (pr === "over-100k") {
+      effectiveMinPrice = 100000;
     }
-    if (maxPrice) {
-      where.price.lte = parseFloat(maxPrice as string);
+  }
+
+  if (effectiveMinPrice !== undefined || effectiveMaxPrice !== undefined) {
+    where.price = {};
+    if (effectiveMinPrice !== undefined && !isNaN(effectiveMinPrice)) {
+      where.price.gte = effectiveMinPrice;
+    }
+    if (effectiveMaxPrice !== undefined && !isNaN(effectiveMaxPrice)) {
+      where.price.lte = effectiveMaxPrice;
+    }
+  }
+
+  // Availability / Stock filter
+  if (stock === "in" || inStock === "true") {
+    where.quantity = { gt: 0 };
+  }
+
+  // Weight filter
+  if (weight) {
+    const weightStr = weight as string;
+    if (weightStr === "light") {
+      where.weight = { lte: 5 };
+    } else if (weightStr === "medium") {
+      where.weight = { gt: 5, lte: 12 };
+    } else if (weightStr === "heavy") {
+      where.weight = { gt: 12 };
+    } else if (!isNaN(Number(weightStr))) {
+      where.weight = { equals: Number(weightStr) };
     }
   }
 
@@ -266,6 +328,7 @@ export const getAllProducts = asyncHandler(async (req, res, next) => {
       include: {
         category: true,
         subCategory: true,
+        brand: true,
         variants: {
           include: {
             attributeValues: {
