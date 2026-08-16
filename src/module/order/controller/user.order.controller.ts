@@ -204,11 +204,6 @@ export const createUserOrder = asyncHandler<AuthenticatedRequest>(async (req, re
       }
     }
 
-    // 3. Clear user's cart items
-    await tx.cartItem.deleteMany({
-      where: { cartId: cart.id }
-    });
-
     return newOrder;
   });
 
