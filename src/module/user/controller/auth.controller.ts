@@ -60,7 +60,7 @@ export const requestOtp = asyncHandler(async (req, res, next) => {
 
   // Generate OTP and validate length
   const otp = MobileNumber.includes(validData.phoneNumber) ? "1234" : generateOtp();
-
+  // console.log("OTP", otp);
   if (otp.length !== OTP_LENGTH) {
     throw new ErrorResponse("Invalid OTP generated", statusCode.Bad_Request);
   }
