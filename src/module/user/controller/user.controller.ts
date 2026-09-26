@@ -101,6 +101,11 @@ export const updateUser = asyncHandler(async (req, res, next) => {
       phoneNumber: true,
       dateOfBirth: true,
       gender: true,
+      accountHolderName: true,
+      bankName: true,
+      accountNumber: true,
+      ifscCode: true,
+      upiId: true,
       updatedAt: true,
     },
   });

@@ -8,5 +8,10 @@ export const updateUsers = z.object({
   // Passing the enum values from your Prisma model
   gender: z.enum(["FEMALE", "MALE", "OTHER"]).optional(),
   // Adding dateOfBirth to match your model
-  dateOfBirth: z.string().datetime().optional() 
+  dateOfBirth: z.string().datetime().optional(),
+  accountHolderName: z.string().optional().nullable(),
+  bankName: z.string().optional().nullable(),
+  accountNumber: z.string().optional().nullable(),
+  ifscCode: z.string().optional().nullable(),
+  upiId: z.string().optional().nullable(),
 });
