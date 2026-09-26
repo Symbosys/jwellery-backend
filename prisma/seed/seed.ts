@@ -2,58 +2,70 @@ import prisma from "../../src/config/prisma.js";
 import bcrypt from "bcryptjs";
 
 async function main() {
-  console.log("Seeding database...");
+  console.log("🌱 Starting admin user seeding...");
 
-  const adminEmail = "admin@symbosys.com";
-  const adminPassword = "AdminPassword@123";
-  const adminPhone = "+1234567890";
+  const adminEmail = process.env.ADMIN_SEED_EMAIL || "admin@symbosys.com";
+  const adminPassword = process.env.ADMIN_SEED_PASSWORD || "AdminPassword@123";
+  const adminPhone = process.env.ADMIN_SEED_PHONE || "+919876543210";
+  const adminFirstName = process.env.ADMIN_SEED_FIRST_NAME || "System";
+  const adminLastName = process.env.ADMIN_SEED_LAST_NAME || "Admin";
 
-  // Check if admin user already exists
+  const hashedPassword = await bcrypt.hash(adminPassword, 10);
+
+  // Check if admin user already exists by email or phone
   const existingAdmin = await prisma.user.findFirst({
     where: {
       OR: [
         { email: adminEmail },
-        { phoneNumber: adminPhone }
-      ]
-    }
+        { phoneNumber: adminPhone },
+      ],
+    },
   });
 
   if (existingAdmin) {
-    console.log(`Admin user already exists with ID: ${existingAdmin.id}. Ensuring role is ADMIN...`);
-    await prisma.user.update({
+    console.log(`ℹ️ User found (ID: ${existingAdmin.id}). Updating to ADMIN role and resetting password...`);
+    const updatedAdmin = await prisma.user.update({
       where: { id: existingAdmin.id },
       data: {
-        role: "ADMIN"
-      }
-    });
-    console.log("Admin role updated/verified successfully.");
-  } else {
-    console.log("Creating new admin user...");
-    const hashedPassword = await bcrypt.hash(adminPassword, 10);
-
-    const admin = await prisma.user.create({
-      data: {
-        firstName: "System",
-        lastName: "Admin",
         email: adminEmail,
         phoneNumber: adminPhone,
         password: hashedPassword,
         role: "ADMIN",
-        gender: "MALE"
-      }
+        firstName: existingAdmin.firstName || adminFirstName,
+        lastName: existingAdmin.lastName || adminLastName,
+      },
     });
 
-    console.log("Admin user created successfully!");
-    console.log(`Email: ${adminEmail}`);
-    console.log(`Password: ${adminPassword}`);
+    console.log("✅ Admin user updated successfully!");
+    console.log(`📧 Email:    ${updatedAdmin.email}`);
+    console.log(`🔑 Password: ${adminPassword}`);
+    console.log(`👑 Role:     ${updatedAdmin.role}`);
+  } else {
+    console.log("🚀 Creating new admin user...");
+    const newAdmin = await prisma.user.create({
+      data: {
+        email: adminEmail,
+        phoneNumber: adminPhone,
+        password: hashedPassword,
+        role: "ADMIN",
+        firstName: adminFirstName,
+        lastName: adminLastName,
+        gender: "MALE",
+      },
+    });
+
+    console.log("✅ Admin user created successfully!");
+    console.log(`📧 Email:    ${newAdmin.email}`);
+    console.log(`🔑 Password: ${adminPassword}`);
+    console.log(`👑 Role:     ${newAdmin.role}`);
   }
 
-  console.log("Seeding completed successfully.");
+  console.log("✨ Seeding completed successfully.");
 }
 
 main()
   .catch((e) => {
-    console.error("Error seeding database:", e);
+    console.error("❌ Error seeding admin user:", e);
     process.exit(1);
   })
   .finally(async () => {

@@ -4,7 +4,8 @@ import {
   updatePaymentStatus,
   getAllOrders,
   getOrderById,
-  updateOrderAddress
+  updateOrderAddress,
+  processOrderRefund
 } from "../controller/order.controller.js";
 import {
   createUserOrder,
@@ -32,8 +33,11 @@ router.get("/", getAllOrders);
 router.get("/:id", getOrderById);
 router.put("/:id/status", updateOrderStatus);
 router.put("/:id/payment", updatePaymentStatus);
+router.post("/:id/refund", processOrderRefund);
+router.put("/:id/refund", processOrderRefund);
 router.put("/admin/:id/address", updateOrderAddress);
 router.put("/admin/:id/return", returnUserOrder);
+
 
 
 

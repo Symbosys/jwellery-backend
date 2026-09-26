@@ -5,6 +5,7 @@
   "scripts": {
     "start": "bun src/index.ts",
     "dev": "bun --watch src/index.ts",
+    "seed": "bun prisma/seed/seed.ts",
     "postinstall": "bunx prisma generate"
   },
   "prisma": {
@@ -30,6 +31,7 @@
     "cloudinary": "^2.8.0",
     "cors": "^2.8.5",
     "country-state-city": "^3.2.1",
+    "dotenv": "^18.0.3",
     "express": "^5.2.1",
     "india-state-district": "^1.0.5",
     "jsonwebtoken": "^9.0.3",

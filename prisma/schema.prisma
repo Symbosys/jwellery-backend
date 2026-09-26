@@ -24,6 +24,13 @@ model User {
   dateOfBirth DateTime?
   gender      Gender?
 
+  // User Bank & UPI Details for refunds
+  accountHolderName String?
+  bankName          String?
+  accountNumber     String?
+  ifscCode          String?
+  upiId             String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -33,6 +40,7 @@ model User {
   addresses    Address[]
   chatSessions ChatSession[]
   reviews      Review[]
+  orderRefunds OrderRefund[]
 }
 
 enum Role {
@@ -215,7 +223,7 @@ model AttributeValue {
   attributeId String
   attribute   Attribute        @relation(fields: [attributeId], references: [id], onDelete: Cascade)
   value       String
-  image        String?
+  image       String?
   variants    ProductVariant[]
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
@@ -277,7 +285,8 @@ model Order {
   addressId   String?
   address     Address? @relation(fields: [addressId], references: [id], onDelete: SetNull)
 
-  items OrderItem[]
+  items   OrderItem[]
+  refunds OrderRefund[]
 
   status        OrderStatus    @default(PENDING)
   paymentStatus PaymentStatus  @default(UNPAID)
@@ -305,7 +314,7 @@ model Order {
   razorpayPaymentId String?
   razorpaySignature String?
 
-  shiprocketOrderId   String?
+  shiprocketOrderId    String?
   shiprocketShipmentId String?
 
   placedAt    DateTime  @default(now())
@@ -660,4 +669,64 @@ model WebConfig {
   pickupAddresses Json?
 
   @@map("web_configs")
+}
+
+model OrderRefund {
+  id           String @id @default(uuid())
+  refundNumber String @unique
+  orderId      String
+  order        Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  amount       Decimal      @db.Decimal(15, 2)
+  reason       String?      @db.Text
+  status       RefundStatus @default(PENDING)
+  refundMethod RefundMethod @default(ORIGINAL_PAYMENT_METHOD)
+
+  // Bank transfer details (if refundMethod is BANK_TRANSFER / UPI)
+  accountHolderName String?
+  bankName          String?
+  accountNumber     String?
+  ifscCode          String?
+  upiId             String?
+  passbookImage     String? @db.LongText
+
+  // Payment gateway / transaction references
+  transactionId   String?
+  gatewayRefundId String?
+  gatewayResponse Json?
+
+  // Processing timestamps & notes
+  adminNote   String?   @db.Text
+  processedAt DateTime?
+  completedAt DateTime?
+  rejectedAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orderId])
+  @@index([userId])
+  @@index([status])
+  @@index([refundNumber])
+  @@map("order_refunds")
+}
+
+enum RefundStatus {
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  PROCESSING
+  COMPLETED
+  REJECTED
+  FAILED
+}
+
+enum RefundMethod {
+  ORIGINAL_PAYMENT_METHOD
+  BANK_TRANSFER
+  UPI
+  WALLET
+  STORE_CREDIT
 }

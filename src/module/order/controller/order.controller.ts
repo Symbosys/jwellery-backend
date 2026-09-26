@@ -2,7 +2,7 @@ import prisma from "../../../config/prisma.js";
 import { asyncHandler } from "../../../middleware/error.middleware.js";
 import { ErrorResponse, SuccessResponse } from "../../../utils/response.utils.js";
 import { statusCode } from "../../../types/types.js";
-import { createOrderSchema, updateOrderStatusSchema, updatePaymentStatusSchema, updateOrderAddressSchema } from "../validation/order.validation.js";
+import { createOrderSchema, updateOrderStatusSchema, updatePaymentStatusSchema, updateOrderAddressSchema, processRefundSchema } from "../validation/order.validation.js";
 import type { AuthenticatedRequest } from "../../../middleware/auth.middleware.js";
 import { createShiprocketOrder, updateShiprocketOrderAddress, cancelShiprocketOrder } from "../services/shiprocket.service.js";
 
@@ -240,8 +240,34 @@ export const getOrderById = asyncHandler<AuthenticatedRequest>(async (req, res, 
     where: { id },
     include: {
       items: true,
-      address: true
-    }
+      address: true,
+      refunds: true,
+      user: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          phoneNumber: true,
+          accountHolderName: true,
+          bankName: true,
+          accountNumber: true,
+          ifscCode: true,
+          upiId: true,
+          orderRefunds: {
+            take: 3,
+            orderBy: { createdAt: "desc" },
+            select: {
+              accountHolderName: true,
+              bankName: true,
+              accountNumber: true,
+              ifscCode: true,
+              upiId: true,
+            },
+          },
+        },
+      },
+    },
   });
 
   if (!order) {
@@ -469,6 +495,110 @@ export const updatePaymentStatus = asyncHandler<AuthenticatedRequest>(async (req
   });
 
   return SuccessResponse(res, "Payment status updated successfully", updatedOrder, statusCode.OK);
+});
+
+// Process refund for an order (Admin/Vendor function)
+export const processOrderRefund = asyncHandler<AuthenticatedRequest>(async (req, res, next) => {
+  const { id } = req.params;
+  if (!id) {
+    throw new ErrorResponse("Order ID is required", statusCode.Bad_Request);
+  }
+
+  const validData = processRefundSchema.parse(req.body);
+  const {
+    amount,
+    reason,
+    refundMethod,
+    adminNote,
+    accountHolderName,
+    bankName,
+    accountNumber,
+    ifscCode,
+    upiId,
+    transactionId,
+  } = validData;
+
+  const order = await prisma.order.findUnique({
+    where: { id },
+    include: {
+      items: true,
+      refunds: true,
+    },
+  });
+
+  if (!order) {
+    throw new ErrorResponse("Order not found", statusCode.Not_Found);
+  }
+
+  const refundAmount = Number(amount);
+  const orderTotal = Number(order.totalAmount);
+
+  if (isNaN(refundAmount) || refundAmount <= 0) {
+    throw new ErrorResponse("Refund amount must be greater than 0", statusCode.Bad_Request);
+  }
+
+  if (refundAmount > orderTotal) {
+    throw new ErrorResponse(`Refund amount cannot exceed total order amount (₹${orderTotal})`, statusCode.Bad_Request);
+  }
+
+  const refundNumber = `REF-${Date.now().toString().slice(-6)}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+  const result = await prisma.$transaction(async (tx) => {
+    // 1. Create order refund record
+    const refund = await tx.orderRefund.create({
+      data: {
+        refundNumber,
+        orderId: order.id,
+        userId: order.userId,
+        amount: refundAmount,
+        reason,
+        status: "COMPLETED",
+        refundMethod: (refundMethod as any) || "ORIGINAL_PAYMENT_METHOD",
+        adminNote: adminNote || null,
+        accountHolderName: accountHolderName || null,
+        bankName: bankName || null,
+        accountNumber: accountNumber || null,
+        ifscCode: ifscCode || null,
+        upiId: upiId || null,
+        transactionId: transactionId || null,
+        processedAt: new Date(),
+        completedAt: new Date(),
+      },
+    });
+
+    // 2. Update order payment status to REFUNDED
+    const updatedOrder = await tx.order.update({
+      where: { id: order.id },
+      data: {
+        paymentStatus: "REFUNDED",
+      },
+      include: {
+        items: true,
+        refunds: true,
+        address: true,
+      },
+    });
+
+    // 3. Persist bank/UPI details on user profile for seamless future refunds
+    if (accountHolderName || bankName || accountNumber || ifscCode || upiId) {
+      await tx.user.update({
+        where: { id: order.userId },
+        data: {
+          ...(accountHolderName ? { accountHolderName } : {}),
+          ...(bankName ? { bankName } : {}),
+          ...(accountNumber ? { accountNumber } : {}),
+          ...(ifscCode ? { ifscCode } : {}),
+          ...(upiId ? { upiId } : {}),
+        },
+      }).catch((err) => {
+        console.error("Non-critical error updating user bank details:", err);
+      });
+    }
+
+    return { refund, order: updatedOrder };
+  });
+
+  return SuccessResponse(res, `Refund of ₹${refundAmount} processed successfully`, result, statusCode.OK);
 });
 
 // 7. Get all orders (Admin/Vendor function)

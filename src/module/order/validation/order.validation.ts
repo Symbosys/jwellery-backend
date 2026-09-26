@@ -43,5 +43,19 @@ export const updateOrderAddressSchema = z.object({
   shippingPincode: z.string({ message: "Shipping pincode is required" }).min(5, "Pincode must be at least 5 characters").trim(),
 });
 
+export const processRefundSchema = z.object({
+  amount: z.union([z.number(), z.string()]).transform((val) => Number(val)),
+  reason: z.string({ message: "Reason is required" }).min(2, "Reason must be at least 2 characters").trim(),
+  refundMethod: z.enum(["ORIGINAL_PAYMENT_METHOD", "BANK_TRANSFER", "UPI", "WALLET", "STORE_CREDIT"]).optional().default("ORIGINAL_PAYMENT_METHOD"),
+  adminNote: z.string().optional(),
+  accountHolderName: z.string().optional(),
+  bankName: z.string().optional(),
+  accountNumber: z.string().optional(),
+  ifscCode: z.string().optional(),
+  upiId: z.string().optional(),
+  transactionId: z.string().optional(),
+});
+
+
 
 

@@ -1,29 +1,29 @@
 import express from "express";
 
+import cors from "cors";
 import errorMiddleware from "./middleware/error.middleware.js";
-import userrouter from "./module/user/routes/auth.routes.js";
 import catogaryrouter from "./module/category/routes/category.routes.js";
 import subcategoryrouter from "./module/sub-category/routes/subcategory.routes.js";
-import cors from "cors";
+import userrouter from "./module/user/routes/auth.routes.js";
 
-import productrouter from "./module/product/routes/product.routes.js";
-import attributerouter from "./module/user/routes/attribute.routes.js";
-import cartrouter from "./module/cart/routes/cart.routes.js";
-import wishlistrouter from "./module/wishlist/routes/wishlist.routes.js";
-import orderrouter from "./module/order/routes/order.routes.js";
-import analyticsrouter from "./module/analytics/routes/analytics.routes.js";
-import bannerrouter from "./module/banner/routes/banner.routes.js";
 import couponrouter from "./coupon/routes/coupon.routes.js";
-import chatsessionrouter from "./module/chatSession/routes/chatSession.routes.js";
-import reviewrouter from "./module/review/routes/review.routes.js";
-import offerrouter from "./module/offer/routes/offer.routes.js";
-import brandrouter from "./module/brand/routes/brand.routes.js";
-import blogrouter from "./module/blogs/routes/blog.routes.js";
 import addressrouter from "./module/address/routes/address.routes.js";
 import adminrouter from "./module/admin/routes/analytics.routes.js";
+import dashboardRouter from "./module/admin/routes/dashboard.routes.js";
 import paymentsRouter from "./module/admin/routes/payments.routes.js";
 import settingsRouter from "./module/admin/routes/settings.routes.js";
-import dashboardRouter from "./module/admin/routes/dashboard.routes.js";
+import analyticsrouter from "./module/analytics/routes/analytics.routes.js";
+import bannerrouter from "./module/banner/routes/banner.routes.js";
+import blogrouter from "./module/blogs/routes/blog.routes.js";
+import brandrouter from "./module/brand/routes/brand.routes.js";
+import cartrouter from "./module/cart/routes/cart.routes.js";
+import chatsessionrouter from "./module/chatSession/routes/chatSession.routes.js";
+import offerrouter from "./module/offer/routes/offer.routes.js";
+import orderrouter from "./module/order/routes/order.routes.js";
+import productrouter from "./module/product/routes/product.routes.js";
+import reviewrouter from "./module/review/routes/review.routes.js";
+import attributerouter from "./module/user/routes/attribute.routes.js";
+import wishlistrouter from "./module/wishlist/routes/wishlist.routes.js";
 
 const app = express();
 
@@ -105,6 +105,8 @@ app.use("/api/admin/dashboard", dashboardRouter);
 app.use("/api/address", addressrouter);
 
 app.use(errorMiddleware);
-app.listen(4000, () => console.log("Server running on port 4000"));
+app.listen(4000, () => {
+  console.log(`Server running on port ${process.env.PORT}`)
+});
 
 export default app;
