@@ -69,18 +69,9 @@ const corsOptions: cors.CorsOptions = {
     "Accept",
     "Origin",
     "Access-Control-Allow-Origin",
-    "Access-Control-Request-Headers",
-    "Access-Control-Request-Method",
-    "Access-Control-Allow-Private-Network",
-    "Access-Control-Request-Private-Network",
   ],
   optionsSuccessStatus: 200,
 };
-
-app.use((req, res, next) => {
-  res.setHeader("Access-Control-Allow-Private-Network", "true");
-  next();
-});
 
 app.use(cors(corsOptions));
 
